@@ -19,7 +19,6 @@ import {
   KeyRound,
   ArrowLeft,
   AlertCircle,
-  Wifi,
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
@@ -211,13 +210,6 @@ const useLang = () => React.useContext(LangContext);
 const makeT = (lang) => (key) => TRANSLATIONS[key] ? TRANSLATIONS[key][lang] : key;
 
 const fmt = (n) => Math.round(n || 0).toLocaleString("hu-HU");
-const cardDigits = (seed) => {
-  let hash = 0;
-  const s = seed || "habitbank";
-  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) >>> 0;
-  const last4 = String(1000 + (hash % 9000));
-  return last4;
-};
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const daysAgoStr = (n) => {
   const d = new Date();
@@ -729,7 +721,6 @@ function BalanceCard({ locked, withdrawable, userName, onTopUp, onWithdraw }) {
   const { t } = useLang();
   const pool = locked + withdrawable;
   const percent = pool > 0 ? Math.min(100, Math.round((withdrawable / pool) * 100)) : 0;
-  const last4 = cardDigits(userName);
 
   return (
     <div className="space-y-3">
@@ -798,12 +789,6 @@ function BalanceCard({ locked, withdrawable, userName, onTopUp, onWithdraw }) {
               </span>
               <span className="text-sm uppercase" style={{ ...mono, color: "#F8F9FA", letterSpacing: "0.06em" }}>
                 {userName || "HABITBANK USER"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Wifi size={16} color="#ADB5BD" style={{ transform: "rotate(90deg)" }} />
-              <span className="text-xs tracking-widest" style={{ ...mono, color: "#ADB5BD" }}>
-                •••• {last4}
               </span>
             </div>
           </div>
