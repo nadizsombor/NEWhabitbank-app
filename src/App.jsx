@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import bgImage from "./assets/bg.jpg";
 import {
   Landmark,
-  LogOut,
   Home,
   BarChart3,
   User,
@@ -12,7 +11,6 @@ import {
   Loader2,
   Plus,
   X,
-  Sparkles,
   Mail,
   Shield,
   CalendarDays,
@@ -22,6 +20,8 @@ import {
   CheckCircle2,
   ChevronRight,
   ChevronLeft,
+  Trash2,
+  SlidersHorizontal,
 } from "lucide-react";
 
 import {
@@ -44,6 +44,8 @@ import {
   setBalanceAmounts,
   addCheckin,
   removeCheckin,
+  updateHabit,
+  deleteHabit,
 } from "./lib/api";
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap');
@@ -83,7 +85,7 @@ function AmbientBackground() {
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(0,0,0,0.42)",
+          background: "rgba(0,0,0,0.55)",
         }}
       />
     </div>
@@ -106,6 +108,7 @@ const C = {
   destructive: "#FF7A7A",
   destructiveForeground: "#0A0A0A",
   border: "rgba(255,255,255,0.16)",
+  slatePill: "rgba(140,151,163,0.4)",
 };
 
 const heading = { fontFamily: SYSTEM_FONT, fontWeight: 700, letterSpacing: "-0.015em" };
@@ -162,6 +165,18 @@ const TRANSLATIONS = {
   "balance.withdraw": { en: "Withdraw", hu: "Kifizetés" },
   "balance.locked": { en: "Locked", hu: "Zárolt" },
   "balance.topUp": { en: "Top Up Balance", hu: "Egyenleg feltöltése" },
+  "balance.savedLabel": { en: "You have saved:", hu: "Megtakarítottál:" },
+  "balance.savedSubtitle": { en: "with completed habits", hu: "teljesített szokásokkal" },
+  "balance.invest": { en: "Invest more", hu: "Feltöltés" },
+  "balance.unlock": { en: "Unlock", hu: "Feloldás" },
+  "modal.unlockTitle": { en: "Unlock Locked Funds", hu: "Zárolt egyenleg feloldása" },
+  "modal.unlockDesc": {
+    en: "This instantly moves your entire locked balance to withdrawable, skipping habit completion.",
+    hu: "Ez azonnal átmozgatja a teljes zárolt egyenleget a kivehetőbe, a szokások teljesítése nélkül.",
+  },
+  "modal.confirmUnlock": { en: "Unlock Funds", hu: "Egyenleg feloldása" },
+  "home.addHabitsToday": { en: "Add Habits for Today", hu: "Adj hozzá szokásokat mára" },
+  "home.addHabitsFor": { en: "Add Habits for", hu: "Adj hozzá szokásokat —" },
   "currency": { en: "HUF", hu: "Ft" },
   "streak.suffix": { en: "days streak", hu: "napos sorozat" },
   "home.todaysHabits": { en: "Today's Habits", hu: "Mai szokások" },
@@ -191,6 +206,24 @@ const TRANSLATIONS = {
   "modal.selectDays": { en: "Select days", hu: "Napok kiválasztása" },
   "modal.daysSelected": { en: "days selected", hu: "nap kiválasztva" },
   "modal.noDaysSelected": { en: "Pick at least one day on the calendar", hu: "Válassz ki legalább egy napot a naptárban" },
+  "home.dailySavedLabel": { en: "Saved today", hu: "Ma megtakarítva" },
+  "home.manageHabits": { en: "Add or manage habits", hu: "Szokások hozzáadása / kezelése" },
+  "modal.manageHabitsTitle": { en: "Manage Habits", hu: "Szokások kezelése" },
+  "modal.addNewHabitRow": { en: "Add new habit", hu: "Új szokás hozzáadása" },
+  "modal.save": { en: "Save", hu: "Mentés" },
+  "modal.confirmUncheckTitle": { en: "Undo check-in?", hu: "Visszavonod a pipát?" },
+  "modal.confirmUncheckDesc": {
+    en: "The money for this habit will move back to your locked balance.",
+    hu: "Ennek a szokásnak az összege visszakerül a zárolt egyenlegbe.",
+  },
+  "modal.confirmDeleteHabitTitle": { en: "Delete habit?", hu: "Törlöd a szokást?" },
+  "modal.confirmDeleteHabitDesc": {
+    en: "This permanently deletes the habit and all of its check-in history.",
+    hu: "Ez véglegesen törli a szokást és az összes hozzá tartozó check-in előzményt.",
+  },
+  "modal.confirm": { en: "Confirm", hu: "Megerősítés" },
+  "modal.cancel": { en: "Cancel", hu: "Mégse" },
+  "modal.delete": { en: "Delete", hu: "Törlés" },
   "analytics.title": { en: "Analytics", hu: "Statisztika" },
   "analytics.comingSoon": { en: "Analytics coming soon", hu: "A statisztika hamarosan érkezik" },
   "analytics.subtitle": { en: "Your balance growth, day by day", hu: "Az egyenleged gyarapodása napról napra" },
@@ -210,17 +243,25 @@ const useLang = () => React.useContext(LangContext);
 const makeT = (lang) => (key) => TRANSLATIONS[key] ? TRANSLATIONS[key][lang] : key;
 
 const fmt = (n) => Math.round(n || 0).toLocaleString("hu-HU");
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const toLocalISODate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+const todayStr = () => toLocalISODate(new Date());
 const daysAgoStr = (n) => {
   const d = new Date();
   d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 };
 const shiftDateStr = (iso, delta) => {
   const d = new Date(iso + "T00:00:00");
   d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return toLocalISODate(d);
 };
+const MONTH_ABBR3 = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+const monthAbbr3 = (iso) => MONTH_ABBR3[new Date(iso + "T00:00:00").getMonth()];
 const WEEKDAYS = { en: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"], hu: ["V", "H", "K", "Sze", "Cs", "P", "Szo"] };
 const dayAbbrev = (iso, lang) => WEEKDAYS[lang || "en"][new Date(iso + "T00:00:00").getDay()];
 const dayNum = (iso) => new Date(iso + "T00:00:00").getDate();
@@ -271,6 +312,7 @@ function Toast({ toast }) {
     <div
       className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90%] px-4 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-[fadeIn_0.2s_ease] hb-glass`}
       style={{
+        position: "fixed",
         background: isError ? "rgba(255,122,122,0.16)" : "rgba(10,10,12,0.65)",
         color: isError ? "#FFD9D9" : C.foreground,
         ...body,
@@ -667,7 +709,11 @@ function BottomNav({ tab, setTab }) {
   return (
     <div
       className="fixed bottom-0 left-0 right-0 h-16 z-40 hb-glass"
-      style={{ borderTop: "1px solid rgba(255,255,255,0.14)", boxShadow: "0 -1px 0 rgba(255,255,255,0.1), 0 -12px 30px -14px rgba(0,0,0,0.7)" }}
+      style={{
+        position: "fixed",
+        borderTop: "1px solid rgba(255,255,255,0.14)",
+        boxShadow: "0 -1px 0 rgba(255,255,255,0.1), 0 -12px 30px -14px rgba(0,0,0,0.7)",
+      }}
     >
       <div className="max-w-lg mx-auto h-full flex items-stretch">
         {items.map(({ key, label, icon: Icon }) => {
@@ -692,24 +738,28 @@ function BottomNav({ tab, setTab }) {
 
 /* --------------------------------- Header ---------------------------------- */
 
-function Header({ user, onLogout }) {
+function Header({ streak }) {
   return (
     <div className="flex items-center justify-between py-4">
       <div className="flex items-center gap-2.5">
-        <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: `${C.primary}26` }}>
-          <Landmark size={18} color={C.primary} />
+        <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass"
+          style={{ background: "rgba(255,255,255,0.09)" }}
+        >
+          <Landmark size={17} color="#F2F2F5" />
         </div>
-        <span className="text-xl tracking-wide" style={heading}>
+        <span className="text-lg font-bold" style={{ ...body, color: C.foreground }}>
           HabitBank
         </span>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="text-sm hidden sm:inline" style={{ color: C.mutedForeground, ...body }}>
-          {user.full_name}
+      <div
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hb-glass"
+        style={{ background: "rgba(255,255,255,0.07)" }}
+      >
+        <Flame size={14} color="#E4E4E7" />
+        <span className="text-xs font-semibold" style={{ color: C.foreground, ...mono }}>
+          {streak}
         </span>
-        <button onClick={onLogout} className="w-8 h-8 rounded-lg flex items-center justify-center active:opacity-60 hb-glass">
-          <LogOut size={15} color={C.mutedForeground} />
-        </button>
       </div>
     </div>
   );
@@ -717,179 +767,120 @@ function Header({ user, onLogout }) {
 
 /* ------------------------------- Balance card ------------------------------- */
 
-function BalanceCard({ locked, withdrawable, userName, onTopUp, onWithdraw }) {
+function BalanceCard({ locked, withdrawable, onTopUp, onWithdraw, onUnlock }) {
   const { t } = useLang();
   const pool = locked + withdrawable;
   const percent = pool > 0 ? Math.min(100, Math.round((withdrawable / pool) * 100)) : 0;
 
   return (
     <div className="space-y-3">
-      <div
-        className="relative rounded-3xl p-5 overflow-hidden hb-glass"
-        style={{
-          aspectRatio: "1.586 / 1",
-          background: `linear-gradient(135deg, rgba(26,29,32,0.72) 0%, rgba(33,37,41,0.62) 45%, rgba(43,48,54,0.55) 100%)`,
-          backdropFilter: "blur(26px) saturate(170%)",
-          WebkitBackdropFilter: "blur(26px) saturate(170%)",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.14), 0 16px 40px -14px rgba(0,0,0,0.7)",
-        }}
-      >
-        {/* subtle decorative rings */}
-        <div
-          className="absolute -right-10 -top-10 w-44 h-44 rounded-full pointer-events-none"
-          style={{ border: `1px solid ${C.primary}26` }}
-        />
-        <div
-          className="absolute -right-4 -top-4 w-32 h-32 rounded-full pointer-events-none"
-          style={{ border: `1px solid ${C.primary}33` }}
-        />
-
-        <div className="relative h-full flex flex-col justify-between">
-          <div className="flex items-start justify-between">
-            {/* EMV-style chip */}
-            <div
-              className="w-9 h-7 rounded-md relative overflow-hidden"
-              style={{ background: `linear-gradient(135deg, ${C.primary}, #A1A1AA)` }}
-            >
-              <div className="absolute inset-0 grid grid-cols-3 grid-rows-2">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} style={{ border: "0.5px solid rgba(0,0,0,0.18)" }} />
-                ))}
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Landmark size={14} color={C.primary} />
-              <span className="text-xs uppercase tracking-wide" style={{ ...heading, color: "#F8F9FA", letterSpacing: "0.08em" }}>
-                HabitBank
-              </span>
-            </div>
-          </div>
-
-          <div>
-            <span
-              className="text-[10px] uppercase font-medium"
-              style={{ color: "#ADB5BD", letterSpacing: "0.12em" }}
-            >
-              {t("balance.withdrawable")}
-            </span>
-            <div className="mt-0.5">
-              <span className="text-3xl sm:text-4xl font-bold" style={{ ...mono, color: "#F8F9FA" }}>
-                {fmt(withdrawable)}
-              </span>{" "}
-              <span className="text-sm font-sans" style={{ color: "#ADB5BD" }}>
-                {t("currency")}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-end justify-between">
-            <div>
-              <span className="text-[10px] uppercase block mb-0.5" style={{ color: "#8A9199", letterSpacing: "0.1em" }}>
-                {t("balance.cardholder")}
-              </span>
-              <span className="text-sm uppercase" style={{ ...mono, color: "#F8F9FA", letterSpacing: "0.06em" }}>
-                {userName || "HABITBANK USER"}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {withdrawable > 0 && (
-        <button
-          onClick={onWithdraw}
-          className="w-full text-sm font-medium flex items-center justify-center gap-1 py-1 active:opacity-70"
-          style={{ color: C.foreground }}
-        >
-          {t("balance.withdraw")} <ChevronRight size={14} />
-        </button>
-      )}
-
-      <div className="rounded-2xl p-5 hb-glass">
-        <div className="flex items-center gap-1.5 mb-2">
-          <Lock size={14} color={C.mutedForeground} />
-          <span className="text-xs uppercase tracking-wide font-medium" style={{ color: C.mutedForeground, letterSpacing: "0.08em" }}>
-            {t("balance.locked")}
-          </span>
-        </div>
-        <div className="mb-3">
-          <span className="text-2xl font-semibold" style={{ ...mono, color: C.foreground }}>
-            {fmt(locked)}
+      <div className="flex flex-col items-center text-center py-3">
+        <span className="text-sm" style={{ color: C.mutedForeground, ...body }}>
+          {t("balance.savedLabel")}
+        </span>
+        <div className="mt-1.5">
+          <span className="text-5xl font-bold" style={{ ...mono, color: C.foreground }}>
+            {fmt(withdrawable)}
           </span>{" "}
-          <span className="text-xs font-sans" style={{ color: C.mutedForeground }}>
+          <span className="text-base font-sans" style={{ color: C.mutedForeground }}>
             {t("currency")}
           </span>
         </div>
-        <div className="h-2 rounded-full overflow-hidden mb-4" style={{ background: C.muted }}>
-          <div
-            className="h-full rounded-full transition-all"
-            style={{ width: `${percent}%`, background: C.primary }}
-          />
-        </div>
+        <span className="text-sm mt-1" style={{ color: C.mutedForeground, ...body }}>
+          {t("balance.savedSubtitle")}
+        </span>
         <button
-          onClick={onTopUp}
-          className="hb-glass w-full h-11 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
-          style={{ background: "rgba(142,202,230,0.14)", color: C.foreground }}
+          onClick={onWithdraw}
+          className="mt-4 px-7 py-2.5 rounded-full text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ background: C.slatePill, color: "#F4F4F5" }}
         >
-          {t("balance.topUp")}
+          {t("balance.withdraw")}
         </button>
       </div>
-    </div>
-  );
-}
 
-/* -------------------------------- Streak badge ------------------------------ */
-
-function StreakBadge({ days }) {
-  const { t } = useLang();
-  return (
-    <div
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border"
-      style={{ background: `${C.accent}1A`, borderColor: `${C.accent}55` }}
-    >
-      <Flame size={14} color="#D1D1D6" />
-      <span className="text-xs font-medium" style={{ color: C.foreground }}>
-        {days} {t("streak.suffix")}
-      </span>
+      <div className="rounded-2xl p-5 hb-glass">
+        <div className="flex items-center gap-1.5 mb-2">
+          <Lock size={13} color={C.mutedForeground} />
+          <span className="text-xs uppercase font-semibold" style={{ color: C.mutedForeground, letterSpacing: "0.04em" }}>
+            {t("balance.locked")}:
+          </span>
+        </div>
+        <div className="mb-3">
+          <span className="text-3xl font-bold" style={{ ...mono, color: C.foreground }}>
+            {fmt(locked)}
+          </span>{" "}
+          <span className="text-sm font-sans" style={{ color: C.mutedForeground }}>
+            {t("currency")}
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: "rgba(255,255,255,0.1)" }}>
+          <div
+            className="h-full rounded-full transition-all"
+            style={{ width: `${percent}%`, background: "#E4E4E7" }}
+          />
+        </div>
+        <div className="flex gap-2.5">
+          <button
+            onClick={onTopUp}
+            className="flex-1 h-10 rounded-full text-sm font-semibold transition-opacity active:opacity-80"
+            style={{ background: C.slatePill, color: "#F4F4F5" }}
+          >
+            {t("balance.invest")}
+          </button>
+          <button
+            onClick={onUnlock}
+            className="flex-1 h-10 rounded-full text-sm font-semibold transition-opacity active:opacity-80"
+            style={{ background: C.slatePill, color: "#F4F4F5" }}
+          >
+            {t("balance.unlock")}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
 
 /* ------------------------------ Habit check item ----------------------------- */
 
-function HabitCheckItem({ habit, checked, disabled, loading, onToggle }) {
+function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle }) {
   const { t } = useLang();
   const displayName = habit.nameKey ? t(habit.nameKey) : habit.name;
+  const rowTextColor = checked ? "#18181B" : C.foreground;
+  const nonInteractive = locked || (disabled && !checked) || loading;
   return (
     <button
-      onClick={() => !loading && !(disabled && !checked) && onToggle(habit)}
-      disabled={(disabled && !checked) || loading}
-      className={`w-full flex items-center justify-between rounded-xl px-4 py-3.5 transition-all hb-glass`}
+      onClick={() => !nonInteractive && onToggle(habit)}
+      disabled={nonInteractive}
+      className={`w-full flex items-center justify-between rounded-3xl px-4 py-4 transition-all ${checked ? "" : "hb-glass"} ${locked ? "cursor-not-allowed" : ""}`}
       style={{
-        background: checked ? "rgba(209,209,214,0.14)" : "rgba(255,255,255,0.045)",
+        background: checked ? "rgba(228,228,231,0.94)" : "rgba(255,255,255,0.045)",
         opacity: disabled && !checked ? 0.45 : 1,
       }}
     >
       <div className="flex items-center gap-3">
         <div
-          className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0 border"
+          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2"
           style={{
-            background: checked ? C.primary : "transparent",
-            borderColor: checked ? C.primary : "rgba(255,255,255,0.25)",
+            background: checked ? "#18181B" : "transparent",
+            borderColor: checked ? "#18181B" : "rgba(255,255,255,0.35)",
           }}
         >
           {loading ? (
-            <Loader2 size={13} className="animate-spin" color={C.mutedForeground} />
+            <Loader2 size={13} className="animate-spin" color={checked ? "#18181B" : C.mutedForeground} />
           ) : (
-            checked && <Check size={14} color={C.primaryForeground} strokeWidth={3} />
+            checked && <Check size={14} color="#F4F4F5" strokeWidth={3} />
           )}
         </div>
-        <span className="text-sm" style={{ color: checked ? C.primary : C.foreground, ...body }}>
+        <span className="text-sm font-semibold" style={{ color: rowTextColor, ...body }}>
           {displayName}
         </span>
+        {locked && <Lock size={12} color="#3F3F46" />}
       </div>
-      <span className="text-sm font-medium" style={{ ...mono, color: checked ? C.primary : C.foreground }}>
-        +{fmt(habit.value_huf)} <span className="text-xs font-sans">{t("currency")}</span>
+      <span
+        className="text-xs font-semibold px-3 py-1.5 rounded-full"
+        style={{ ...mono, color: "#E4E4E7", background: "rgba(0,0,0,0.35)" }}
+      >
+        {fmt(habit.value_huf)} <span className="text-[10px] font-sans">{t("currency")}</span>
       </span>
     </button>
   );
@@ -902,39 +893,86 @@ function WeekStrip({ checkins, selectedDate, onSelect }) {
   const daysWithCheckin = useMemo(() => new Set(checkins.map((c) => c.completed_date)), [checkins]);
   const today = todayStr();
   const days = [];
-  for (let i = 6; i >= 0; i--) days.push(daysAgoStr(i));
+  for (let i = -3; i <= 3; i++) days.push(shiftDateStr(today, i));
 
   return (
     <div className="flex items-center justify-between gap-1.5">
       {days.map((iso) => {
         const done = daysWithCheckin.has(iso);
         const isToday = iso === today;
+        const isFuture = iso > today;
         const isSelected = iso === selectedDate;
+        const clickable = !isFuture;
+
+        let bg;
+        let textColor;
+        if (done) {
+          bg = C.primary;
+          textColor = C.primaryForeground;
+        } else if (isToday) {
+          bg = "rgba(255,255,255,0.20)";
+          textColor = C.foreground;
+        } else if (isFuture) {
+          bg = "rgba(255,255,255,0.10)";
+          textColor = C.foreground;
+        } else {
+          bg = "rgba(255,255,255,0.025)";
+          textColor = C.mutedForeground;
+        }
+
         return (
           <button
             key={iso}
-            onClick={() => onSelect(iso)}
-            className="flex-1 flex flex-col items-center gap-1 active:opacity-70"
+            onClick={() => clickable && onSelect(iso)}
+            disabled={!clickable}
+            className={`flex-1 flex flex-col items-center gap-1 ${clickable ? "active:opacity-70" : "cursor-default"}`}
           >
             <span className="text-[10px] font-medium" style={{ color: C.mutedForeground }}>
               {dayAbbrev(iso, lang)}
             </span>
             <div
-              className={`w-9 h-9 rounded-xl flex items-center justify-center text-xs border-2 ${done ? "" : "hb-glass"}`}
+              className="w-9 h-10 rounded-lg flex flex-col items-center justify-center leading-none border-2 py-1"
               style={{
-                background: done ? C.primary : undefined,
-                color: done ? C.primaryForeground : C.mutedForeground,
-                borderColor: isSelected ? C.foreground : isToday && !done ? `${C.primary}55` : "transparent",
-                fontWeight: done ? 600 : 400,
+                background: bg,
+                color: textColor,
+                borderColor: isSelected ? C.foreground : isToday ? `${C.primary}66` : "transparent",
                 ...mono,
               }}
             >
-              {dayNum(iso)}
+              <span className="text-xs" style={{ fontWeight: done || isToday ? 700 : 500 }}>
+                {dayNum(iso)}
+              </span>
+              <span className="text-[8px] mt-0.5" style={{ opacity: 0.75, fontWeight: 500 }}>
+                {monthAbbr3(iso)}
+              </span>
             </div>
           </button>
         );
       })}
     </div>
+  );
+}
+
+/* ------------------------------ Add habits box -------------------------------- */
+
+function AddHabitsBox({ isToday, dateLabel, onClick }) {
+  const { t } = useLang();
+  return (
+    <button
+      onClick={onClick}
+      className="w-full rounded-2xl py-14 flex flex-col items-center justify-center gap-4 text-center transition-opacity active:opacity-70"
+      style={{ border: "1.5px dashed rgba(255,255,255,0.3)" }}
+    >
+      <span className="text-sm font-semibold" style={{ color: C.foreground, ...body }}>
+        {isToday ? t("home.addHabitsToday") : `${t("home.addHabitsFor")} ${dateLabel}`}
+      </span>
+      <div
+        className="w-9 h-9 rounded-full flex items-center justify-center border-2"
+        style={{ borderColor: "rgba(255,255,255,0.4)" }}
+      >
+        <Plus size={18} color={C.foreground} />
+      </div>
+    </button>
   );
 }
 
@@ -1037,6 +1075,36 @@ function WithdrawModal({ withdrawable, onClose, onConfirm }) {
         style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
       >
         {t("modal.confirmWithdraw")}
+      </button>
+    </ModalBase>
+  );
+}
+
+function UnlockModal({ locked, onClose, onConfirm }) {
+  const { t } = useLang();
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.unlockTitle")} onClose={onClose} />
+      <p className="text-sm mb-1" style={{ color: C.mutedForeground }}>
+        {t("balance.locked")}
+      </p>
+      <div className="mb-3">
+        <span className="text-3xl font-bold" style={{ ...mono, color: C.primary }}>
+          {fmt(locked)}
+        </span>{" "}
+        <span className="text-sm font-sans" style={{ color: C.mutedForeground }}>
+          {t("currency")}
+        </span>
+      </div>
+      <p className="text-xs mb-5" style={{ color: C.mutedForeground }}>
+        {t("modal.unlockDesc")}
+      </p>
+      <button
+        onClick={onConfirm}
+        className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
+        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+      >
+        {t("modal.confirmUnlock")}
       </button>
     </ModalBase>
   );
@@ -1295,15 +1363,237 @@ function CustomScheduleHabitModal({ onClose, onConfirm }) {
   );
 }
 
+/* ------------------------------ Manage habits ---------------------------------- */
+
+function ManageHabitRow({ habit, onRename, onValueChange, onRequestDelete }) {
+  const { t } = useLang();
+  return (
+    <div className="flex items-center gap-2 rounded-2xl px-3 py-2.5 hb-glass">
+      <input
+        type="text"
+        value={habit.name}
+        onChange={(e) => onRename(habit.id, e.target.value)}
+        className="flex-1 min-w-0 bg-transparent outline-none text-sm font-medium"
+        style={{ color: C.foreground, ...body }}
+      />
+      <input
+        type="number"
+        inputMode="numeric"
+        value={habit.value_huf}
+        onChange={(e) => onValueChange(habit.id, Number(e.target.value) || 0)}
+        className="w-20 bg-transparent outline-none text-sm text-right rounded-lg px-2 py-1"
+        style={{ color: C.foreground, background: "rgba(0,0,0,0.3)", ...mono }}
+      />
+      <span className="text-[10px] font-sans shrink-0" style={{ color: C.mutedForeground }}>
+        {t("currency")}
+      </span>
+      <button
+        onClick={() => onRequestDelete(habit)}
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
+        style={{ background: "rgba(255,122,122,0.12)" }}
+      >
+        <Trash2 size={14} color={C.destructive} />
+      </button>
+    </div>
+  );
+}
+
+function ConfirmDeleteHabitModal({ habitName, onClose, onConfirm }) {
+  const { t } = useLang();
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.confirmDeleteHabitTitle")} onClose={onClose} />
+      <p className="text-sm mb-1" style={{ color: C.foreground, ...body }}>
+        {habitName}
+      </p>
+      <p className="text-xs mb-5" style={{ color: C.mutedForeground }}>
+        {t("modal.confirmDeleteHabitDesc")}
+      </p>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ background: C.destructive, color: "#2A0A0A" }}
+        >
+          {t("modal.delete")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAddNew }) {
+  const { t } = useLang();
+  const [draftHabits, setDraftHabits] = useState(() => habits.map((h) => ({ ...h })));
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleRename = (id, name) => {
+    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, name } : h)));
+  };
+  const handleValueChange = (id, value_huf) => {
+    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_huf } : h)));
+  };
+
+  const handleConfirmDelete = async () => {
+    const id = pendingDelete.id;
+    setPendingDelete(null);
+    setDraftHabits((prev) => prev.filter((h) => h.id !== id));
+    await onDeleteHabit(id);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const changed = draftHabits.filter((d) => {
+      const original = habits.find((h) => h.id === d.id);
+      return (
+        original &&
+        (original.name !== d.name || original.value_huf !== d.value_huf) &&
+        d.name.trim() &&
+        d.value_huf > 0
+      );
+    });
+    await onSaveChanges(changed);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.manageHabitsTitle")} onClose={onClose} />
+      {draftHabits.length === 0 ? (
+        <p className="text-sm text-center py-6" style={{ color: C.mutedForeground }}>
+          {t("home.noHabits")}
+        </p>
+      ) : (
+        <div className="space-y-2 mb-4 max-h-[50vh] overflow-y-auto">
+          {draftHabits.map((h) => (
+            <ManageHabitRow
+              key={h.id}
+              habit={h}
+              onRename={handleRename}
+              onValueChange={handleValueChange}
+              onRequestDelete={setPendingDelete}
+            />
+          ))}
+        </div>
+      )}
+      <button
+        onClick={onAddNew}
+        className="w-full flex items-center justify-center gap-1.5 text-sm font-medium py-3 rounded-xl mb-3 hb-glass active:opacity-80"
+        style={{ color: C.foreground }}
+      >
+        <Plus size={14} />
+        {t("modal.addNewHabitRow")}
+      </button>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: C.slatePill, color: "#F4F4F5" }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+      {pendingDelete && (
+        <ConfirmDeleteHabitModal
+          habitName={pendingDelete.nameKey ? t(pendingDelete.nameKey) : pendingDelete.name}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
+    </ModalBase>
+  );
+}
+
+/* ---------------------------- Daily summary row -------------------------------- */
+
+function DailySummaryRow({ savedAmount, onManage }) {
+  const { t } = useLang();
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <div>
+        <span className="text-[11px] uppercase font-semibold block" style={{ color: C.mutedForeground, letterSpacing: "0.04em" }}>
+          {t("home.dailySavedLabel")}
+        </span>
+        <span className="text-base font-bold" style={{ ...mono, color: C.foreground }}>
+          {fmt(savedAmount)} <span className="text-xs font-sans" style={{ color: C.mutedForeground }}>{t("currency")}</span>
+        </span>
+      </div>
+      <button
+        onClick={onManage}
+        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full hb-glass active:opacity-80"
+        style={{ color: C.foreground }}
+      >
+        <SlidersHorizontal size={13} />
+        {t("home.manageHabits")}
+      </button>
+    </div>
+  );
+}
+
+/* ------------------------------ Confirm uncheck --------------------------------- */
+
+function ConfirmUncheckModal({ habit, onClose, onConfirm }) {
+  const { t } = useLang();
+  const displayName = habit.nameKey ? t(habit.nameKey) : habit.name;
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.confirmUncheckTitle")} onClose={onClose} />
+      <p className="text-sm mb-1" style={{ color: C.foreground, ...body }}>
+        {displayName}
+      </p>
+      <p className="text-xs mb-5" style={{ color: C.mutedForeground }}>
+        {t("modal.confirmUncheckDesc")}
+      </p>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ background: C.slatePill, color: "#F4F4F5" }}
+        >
+          {t("modal.confirm")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
 /* ---------------------------------- Home page --------------------------------- */
 
 function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast }) {
   const { t, lang } = useLang();
   const [showTopUp, setShowTopUp] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
+  const [showUnlock, setShowUnlock] = useState(false);
   const [showChoice, setShowChoice] = useState(false);
   const [showDailyModal, setShowDailyModal] = useState(false);
   const [showCustomModal, setShowCustomModal] = useState(false);
+  const [showManage, setShowManage] = useState(false);
+  const [pendingUncheck, setPendingUncheck] = useState(null);
   const [checkingId, setCheckingId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayStr());
 
@@ -1317,6 +1607,13 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
     () => new Set(checkins.filter((c) => c.completed_date === selectedDate).map((c) => c.habit_id)),
     [checkins, selectedDate]
   );
+
+  const savedToday = useMemo(() => {
+    const valueByHabit = new Map(habits.map((h) => [h.id, h.value_huf]));
+    return checkins
+      .filter((c) => c.completed_date === selectedDate)
+      .reduce((sum, c) => sum + (valueByHabit.get(c.habit_id) || 0), 0);
+  }, [checkins, habits, selectedDate]);
 
   const streak = useMemo(() => {
     const daysWithCheckin = new Set(checkins.map((c) => c.completed_date));
@@ -1353,6 +1650,18 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
     }
   };
 
+  const handleUnlock = async () => {
+    const next = { locked_amount: 0, withdrawable_amount: balance.withdrawable_amount + balance.locked_amount };
+    setShowUnlock(false);
+    try {
+      await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
+      setBalance(next);
+      showToast(t("toast.withdrawComplete"));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
   const handleAddDailyHabit = async (name, value_huf) => {
     setShowDailyModal(false);
     try {
@@ -1375,33 +1684,56 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
     }
   };
 
-  const goPrevDay = () => setSelectedDate((d) => shiftDateStr(d, -1));
-  const goNextDay = () =>
-    setSelectedDate((d) => {
-      const next = shiftDateStr(d, 1);
-      return next <= today ? next : d;
-    });
-  const nextDisabled = selectedDate >= today;
+  const handleSaveHabitChanges = async (changedHabits) => {
+    if (changedHabits.length === 0) return;
+    try {
+      await Promise.all(changedHabits.map((h) => updateHabit(h.id, { name: h.name, value_huf: h.value_huf })));
+      setHabits((prev) =>
+        prev.map((h) => {
+          const changed = changedHabits.find((c) => c.id === h.id);
+          return changed ? { ...h, name: changed.name, value_huf: changed.value_huf } : h;
+        })
+      );
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleDeleteHabit = async (id) => {
+    try {
+      await deleteHabit(id);
+      setHabits((prev) => prev.filter((h) => h.id !== id));
+      setCheckins((prev) => prev.filter((c) => c.habit_id !== id));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const performUncheck = async (habit) => {
+    setCheckingId(habit.id);
+    const next = {
+      locked_amount: balance.locked_amount + habit.value_huf,
+      withdrawable_amount: Math.max(0, balance.withdrawable_amount - habit.value_huf),
+    };
+    try {
+      await removeCheckin(habit.id, selectedDate);
+      await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
+      setBalance(next);
+      setCheckins((prev) => prev.filter((c) => !(c.habit_id === habit.id && c.completed_date === selectedDate)));
+      showToast(`${fmt(habit.value_huf)} ${t("currency")} ${t("toast.movedBackSuffix")}`);
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+    setCheckingId(null);
+  };
 
   const handleToggle = async (habit) => {
     const isChecked = checkinsSelected.has(habit.id);
+    const isPast = selectedDate < today;
 
     if (isChecked) {
-      setCheckingId(habit.id);
-      const next = {
-        locked_amount: balance.locked_amount + habit.value_huf,
-        withdrawable_amount: Math.max(0, balance.withdrawable_amount - habit.value_huf),
-      };
-      try {
-        await removeCheckin(habit.id, selectedDate);
-        await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
-        setBalance(next);
-        setCheckins((prev) => prev.filter((c) => !(c.habit_id === habit.id && c.completed_date === selectedDate)));
-        showToast(`${fmt(habit.value_huf)} ${t("currency")} ${t("toast.movedBackSuffix")}`);
-      } catch (e) {
-        showToast(e.message, "error");
-      }
-      setCheckingId(null);
+      if (isPast) return; // locked: past check-ins can't be modified
+      setPendingUncheck(habit);
       return;
     }
 
@@ -1428,41 +1760,24 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <Header user={user} onLogout={() => showToast(t("toast.logoutHint"))} />
+      <Header streak={streak} />
 
       <BalanceCard
         locked={balance.locked_amount}
         withdrawable={balance.withdrawable_amount}
-        userName={user.full_name}
         onTopUp={() => setShowTopUp(true)}
         onWithdraw={() => setShowWithdraw(true)}
+        onUnlock={() => setShowUnlock(true)}
       />
 
-      <div className="flex items-center justify-between mt-5 mb-2">
-        <StreakBadge days={streak} />
-      </div>
-
-      <div className="rounded-2xl p-4 mb-5 mt-3 hb-glass">
-        <WeekStrip checkins={checkins} selectedDate={selectedDate} onSelect={setSelectedDate} />
-      </div>
-
-      <div className="flex items-center justify-center gap-1.5 mb-2">
-        <button
-          onClick={goPrevDay}
-          className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60 hb-glass"
-        >
-          <ChevronLeft size={15} color={C.foreground} />
-        </button>
-        <span className="text-lg tracking-wide px-0.5" style={heading}>
+      <div className="text-center mt-5 mb-3">
+        <span className="text-base font-bold" style={{ ...body, color: C.foreground }}>
           {selectedDate === today ? t("home.todaysHabits") : `${t("home.habitsFor")} ${formatShortDate(selectedDate, lang)}`}
         </span>
-        <button
-          onClick={goNextDay}
-          disabled={nextDisabled}
-          className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60 disabled:opacity-30 hb-glass"
-        >
-          <ChevronRight size={15} color={C.foreground} />
-        </button>
+      </div>
+
+      <div className="rounded-2xl p-4 mb-4 hb-glass">
+        <WeekStrip checkins={checkins} selectedDate={selectedDate} onSelect={setSelectedDate} />
       </div>
 
       {selectedDate !== today && (
@@ -1477,38 +1792,34 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
         </div>
       )}
 
-      {activeHabits.length === 0 ? (
-        <div className="rounded-2xl border border-dashed p-8 text-center mb-4" style={{ borderColor: C.border }}>
-          <Sparkles size={22} color={C.mutedForeground} className="mx-auto mb-2" />
-          <p className="text-sm" style={{ color: C.mutedForeground }}>
-            {habits.length === 0 ? t("home.noHabits") : t("home.noHabitsToday")}
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-2 mb-4">
-          {activeHabits.map((h) => (
-            <HabitCheckItem
-              key={h.id}
-              habit={h}
-              checked={checkinsSelected.has(h.id)}
-              disabled={!checkinsSelected.has(h.id) && balance.locked_amount < h.value_huf}
-              loading={checkingId === h.id}
-              onToggle={handleToggle}
-            />
-          ))}
-        </div>
+      {activeHabits.length > 0 && (
+        <>
+          <DailySummaryRow savedAmount={savedToday} onManage={() => setShowManage(true)} />
+          <div className="space-y-2 mb-3">
+            {activeHabits.map((h) => (
+              <HabitCheckItem
+                key={h.id}
+                habit={h}
+                checked={checkinsSelected.has(h.id)}
+                disabled={!checkinsSelected.has(h.id) && balance.locked_amount < h.value_huf}
+                locked={selectedDate < today && checkinsSelected.has(h.id)}
+                loading={checkingId === h.id}
+                onToggle={handleToggle}
+              />
+            ))}
+          </div>
+        </>
       )}
 
-      <div className="flex justify-center py-2">
-        <button
-          onClick={() => setShowChoice(true)}
-          className="flex items-center gap-2 text-sm font-medium px-5 py-3 rounded-full active:opacity-80 hb-glass"
-          style={{ color: C.foreground }}
-        >
-          <Plus size={15} />
-          {t("home.addNewHabit")}
-        </button>
-      </div>
+      {habits.length === 0 && (
+        <div className="mt-3">
+          <AddHabitsBox
+            isToday={selectedDate === today}
+            dateLabel={formatShortDate(selectedDate, lang)}
+            onClick={() => setShowChoice(true)}
+          />
+        </div>
+      )}
 
       {showTopUp && <TopUpModal onClose={() => setShowTopUp(false)} onConfirm={handleTopUp} />}
       {showWithdraw && (
@@ -1516,6 +1827,31 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
           withdrawable={balance.withdrawable_amount}
           onClose={() => setShowWithdraw(false)}
           onConfirm={handleWithdraw}
+        />
+      )}
+      {showUnlock && (
+        <UnlockModal locked={balance.locked_amount} onClose={() => setShowUnlock(false)} onConfirm={handleUnlock} />
+      )}
+      {pendingUncheck && (
+        <ConfirmUncheckModal
+          habit={pendingUncheck}
+          onClose={() => setPendingUncheck(null)}
+          onConfirm={() => {
+            performUncheck(pendingUncheck);
+            setPendingUncheck(null);
+          }}
+        />
+      )}
+      {showManage && (
+        <ManageHabitsModal
+          habits={habits}
+          onClose={() => setShowManage(false)}
+          onSaveChanges={handleSaveHabitChanges}
+          onDeleteHabit={handleDeleteHabit}
+          onAddNew={() => {
+            setShowManage(false);
+            setShowChoice(true);
+          }}
         />
       )}
       {showChoice && (

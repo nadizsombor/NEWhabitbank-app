@@ -1,21 +1,29 @@
 -- HabitBank schema. Run this once in your Supabase project's SQL Editor
 -- (Dashboard -> SQL Editor -> New query -> paste this whole file -> Run).
 
+-- profiles.id is intentionally a plain uuid with NO foreign key to
+-- auth.users: auth.users has row level security enabled, which can make
+-- Postgres' FK validation report "row not present" even though it exists
+-- (this affects the postgres role too, not just the client). id is trusted
+-- as-is because it only ever gets populated by the AFTER INSERT trigger on
+-- auth.users below, which supplies new.id directly.
 create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id uuid primary key,
   full_name text not null default '',
   created_at timestamptz not null default now()
 );
 
+-- balances/habits/checkins reference public.profiles (not auth.users) for
+-- the same reason.
 create table if not exists public.balances (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  user_id uuid primary key references public.profiles(id) on delete cascade,
   locked_amount numeric not null default 12000,
   withdrawable_amount numeric not null default 0
 );
 
 create table if not exists public.habits (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
   name text not null,
   value_huf numeric not null,
   type text not null default 'daily' check (type in ('daily', 'custom')),
@@ -26,7 +34,7 @@ create table if not exists public.habits (
 
 create table if not exists public.checkins (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
   habit_id uuid not null references public.habits(id) on delete cascade,
   completed_date date not null,
   created_at timestamptz not null default now(),

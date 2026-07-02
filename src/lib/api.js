@@ -74,3 +74,13 @@ export async function removeCheckin(habitId, completedDate) {
     .eq("completed_date", completedDate);
   if (error) throw error;
 }
+
+export async function updateHabit(habitId, { name, value_huf }) {
+  const { error } = await supabase.from("habits").update({ name, value_huf }).eq("id", habitId);
+  if (error) throw error;
+}
+
+export async function deleteHabit(habitId) {
+  const { error } = await supabase.from("habits").delete().eq("id", habitId);
+  if (error) throw error;
+}
