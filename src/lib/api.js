@@ -1,0 +1,76 @@
+import { supabase } from "./supabaseClient";
+
+const fromDbHabit = (h) => ({
+  id: h.id,
+  name: h.name,
+  value_huf: h.value_huf,
+  type: h.type,
+  archived: h.archived,
+  scheduledDates: h.scheduled_dates || [],
+});
+
+export async function loadUserData(userId) {
+  const [{ data: profile }, { data: balanceRow }, { data: habitRows }, { data: checkinRows }] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).single(),
+    supabase.from("balances").select("*").eq("user_id", userId).single(),
+    supabase.from("habits").select("*").eq("user_id", userId).order("created_at"),
+    supabase.from("checkins").select("*").eq("user_id", userId),
+  ]);
+
+  return {
+    profile,
+    balance: {
+      locked_amount: balanceRow?.locked_amount ?? 0,
+      withdrawable_amount: balanceRow?.withdrawable_amount ?? 0,
+    },
+    habits: (habitRows || []).map(fromDbHabit),
+    checkins: (checkinRows || []).map((c) => ({ id: c.id, habit_id: c.habit_id, completed_date: c.completed_date })),
+  };
+}
+
+export async function addDailyHabit(userId, name, value_huf) {
+  const { data, error } = await supabase
+    .from("habits")
+    .insert({ user_id: userId, name, value_huf, type: "daily" })
+    .select()
+    .single();
+  if (error) throw error;
+  return fromDbHabit(data);
+}
+
+export async function addCustomHabit(userId, name, value_huf, scheduledDates) {
+  const { data, error } = await supabase
+    .from("habits")
+    .insert({ user_id: userId, name, value_huf, type: "custom", scheduled_dates: scheduledDates })
+    .select()
+    .single();
+  if (error) throw error;
+  return fromDbHabit(data);
+}
+
+export async function setBalanceAmounts(userId, locked_amount, withdrawable_amount) {
+  const { error } = await supabase
+    .from("balances")
+    .update({ locked_amount, withdrawable_amount })
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
+export async function addCheckin(userId, habitId, completedDate) {
+  const { data, error } = await supabase
+    .from("checkins")
+    .insert({ user_id: userId, habit_id: habitId, completed_date: completedDate })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function removeCheckin(habitId, completedDate) {
+  const { error } = await supabase
+    .from("checkins")
+    .delete()
+    .eq("habit_id", habitId)
+    .eq("completed_date", completedDate);
+  if (error) throw error;
+}
