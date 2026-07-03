@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   Trash2,
   SlidersHorizontal,
+  Repeat,
 } from "lucide-react";
 
 import {
@@ -41,6 +42,7 @@ import {
   loadUserData,
   addDailyHabit,
   addCustomHabit,
+  addWeeklyHabit,
   setBalanceAmounts,
   addCheckin,
   removeCheckin,
@@ -160,6 +162,14 @@ const TRANSLATIONS = {
   "nav.home": { en: "Home", hu: "Kezdőlap" },
   "nav.analytics": { en: "Analytics", hu: "Statisztika" },
   "nav.profile": { en: "Profile", hu: "Profil" },
+  "nav.habitCalendar": { en: "Habit Calendar", hu: "Szokásnaptár" },
+  "calendar.title": { en: "Habit Calendar", hu: "Szokásnaptár" },
+  "calendar.addHabits": { en: "Add habits", hu: "Szokások hozzáadása" },
+  "calendar.monthly": { en: "Monthly", hu: "Havi" },
+  "calendar.weekly": { en: "Weekly", hu: "Heti" },
+  "calendar.daily": { en: "Daily", hu: "Napi" },
+  "calendar.today": { en: "Today", hu: "Ma" },
+  "calendar.noHabitsThisDay": { en: "No habits scheduled", hu: "Nincs beütemezett szokás" },
   "balance.withdrawable": { en: "Withdrawable", hu: "Kivehető" },
   "balance.cardholder": { en: "Cardholder", hu: "Kártyabirtokos" },
   "balance.withdraw": { en: "Withdraw", hu: "Kifizetés" },
@@ -206,6 +216,12 @@ const TRANSLATIONS = {
   "modal.selectDays": { en: "Select days", hu: "Napok kiválasztása" },
   "modal.daysSelected": { en: "days selected", hu: "nap kiválasztva" },
   "modal.noDaysSelected": { en: "Pick at least one day on the calendar", hu: "Válassz ki legalább egy napot a naptárban" },
+  "modal.frequency": { en: "Frequency", hu: "Gyakoriság" },
+  "modal.exactDate": { en: "Exact Date", hu: "Pontos dátum" },
+  "modal.exactDateDesc": { en: "One-time event on a specific date", hu: "Egyszeri esemény egy adott napon" },
+  "modal.customRecurrence": { en: "Custom Recurrence", hu: "Egyedi ismétlődés" },
+  "modal.customRecurrenceDesc": { en: "Pick specific days of the week", hu: "Válaszd ki a hét konkrét napjait" },
+  "modal.noWeekdaysSelected": { en: "Pick at least one day of the week", hu: "Válassz ki legalább egy napot a hétből" },
   "home.dailySavedLabel": { en: "Saved today", hu: "Ma megtakarítva" },
   "home.manageHabits": { en: "Add or manage habits", hu: "Szokások hozzáadása / kezelése" },
   "modal.manageHabitsTitle": { en: "Manage Habits", hu: "Szokások kezelése" },
@@ -704,7 +720,7 @@ function BottomNav({ tab, setTab }) {
   const items = [
     { key: "home", label: t("nav.home"), icon: Home },
     { key: "analytics", label: t("nav.analytics"), icon: BarChart3 },
-    { key: "profile", label: t("nav.profile"), icon: User },
+    { key: "calendar", label: t("nav.habitCalendar"), icon: CalendarDays },
   ];
   return (
     <div
@@ -738,20 +754,16 @@ function BottomNav({ tab, setTab }) {
 
 /* --------------------------------- Header ---------------------------------- */
 
-function Header({ streak }) {
+function Header({ streak, onProfileClick }) {
   return (
     <div className="flex items-center justify-between py-4">
-      <div className="flex items-center gap-2.5">
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass"
-          style={{ background: "rgba(255,255,255,0.09)" }}
-        >
-          <Landmark size={17} color="#F2F2F5" />
-        </div>
-        <span className="text-lg font-bold" style={{ ...body, color: C.foreground }}>
-          HabitBank
-        </span>
-      </div>
+      <button
+        onClick={onProfileClick}
+        className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70"
+        style={{ background: "rgba(255,255,255,0.09)" }}
+      >
+        <User size={17} color="#F2F2F5" />
+      </button>
       <div
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hb-glass"
         style={{ background: "rgba(255,255,255,0.07)" }}
@@ -1110,10 +1122,72 @@ function UnlockModal({ locked, onClose, onConfirm }) {
   );
 }
 
-function AddHabitModal({ onClose, onConfirm }) {
-  const { t } = useLang();
+function FrequencyOption({ selected, onClick, icon: Icon, label, desc }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-4 py-3.5 rounded-2xl hb-glass transition-opacity active:opacity-80 flex items-center gap-3"
+      style={{
+        background: selected ? "rgba(209,209,214,0.14)" : "rgba(255,255,255,0.03)",
+        border: selected ? `1px solid ${C.primary}66` : "1px solid transparent",
+      }}
+    >
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+        style={{ background: selected ? C.primary : "rgba(255,255,255,0.08)" }}
+      >
+        <Icon size={16} color={selected ? C.primaryForeground : C.foreground} />
+      </div>
+      <div>
+        <div className="text-sm font-semibold" style={{ color: C.foreground }}>
+          {label}
+        </div>
+        <div className="text-xs mt-0.5" style={{ color: C.mutedForeground }}>
+          {desc}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function AddHabitForm({ onClose, onConfirm }) {
+  const { t, lang } = useLang();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
+  const [frequency, setFrequency] = useState("daily"); // daily | date | weekly
+  const [exactDate, setExactDate] = useState(todayStr());
+  const [selectedWeekdays, setSelectedWeekdays] = useState(new Set());
+  const [error, setError] = useState("");
+
+  const toggleWeekday = (day) => {
+    setSelectedWeekdays((prev) => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  };
+
+  const submit = () => {
+    if (!name.trim() || !(Number(value) > 0)) return;
+    setError("");
+    if (frequency === "daily") {
+      onConfirm({ type: "daily", name: name.trim(), value_huf: Number(value) });
+    } else if (frequency === "date") {
+      onConfirm({ type: "custom", name: name.trim(), value_huf: Number(value), scheduledDates: [exactDate] });
+    } else {
+      if (selectedWeekdays.size === 0) {
+        setError(t("modal.noWeekdaysSelected"));
+        return;
+      }
+      onConfirm({
+        type: "weekly",
+        name: name.trim(),
+        value_huf: Number(value),
+        weekdays: Array.from(selectedWeekdays),
+      });
+    }
+  };
 
   return (
     <ModalBase onClose={onClose}>
@@ -1139,219 +1213,77 @@ function AddHabitModal({ onClose, onConfirm }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder="500"
-        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-5 hb-glass"
-        style={{ color: C.foreground, ...mono }}
-      />
-      <button
-        onClick={() => name.trim() && Number(value) > 0 && onConfirm(name.trim(), Number(value))}
-        className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
-      >
-        {t("modal.createHabit")}
-      </button>
-    </ModalBase>
-  );
-}
-
-function AddHabitChoiceModal({ onClose, onChooseDaily, onChooseCustom }) {
-  const { t } = useLang();
-  return (
-    <ModalBase onClose={onClose}>
-      <ModalHeader title={t("habitType.chooseTitle")} onClose={onClose} />
-      <div className="space-y-3">
-        <button
-          onClick={onChooseDaily}
-          className="w-full text-left px-4 py-4 rounded-2xl hb-glass transition-opacity active:opacity-80 flex items-center gap-3"
-        >
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 hb-glass" style={{ background: "rgba(209,209,214,0.14)" }}>
-            <Flame size={18} color={C.foreground} />
-          </div>
-          <div>
-            <div className="text-sm font-semibold" style={{ color: C.foreground }}>
-              {t("habitType.daily")}
-            </div>
-            <div className="text-xs mt-0.5" style={{ color: C.mutedForeground }}>
-              {t("habitType.dailyDesc")}
-            </div>
-          </div>
-        </button>
-        <button
-          onClick={onChooseCustom}
-          className="w-full text-left px-4 py-4 rounded-2xl hb-glass transition-opacity active:opacity-80 flex items-center gap-3"
-        >
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 hb-glass" style={{ background: "rgba(142,202,230,0.14)" }}>
-            <CalendarDays size={18} color={C.foreground} />
-          </div>
-          <div>
-            <div className="text-sm font-semibold" style={{ color: C.foreground }}>
-              {t("habitType.custom")}
-            </div>
-            <div className="text-xs mt-0.5" style={{ color: C.mutedForeground }}>
-              {t("habitType.customDesc")}
-            </div>
-          </div>
-        </button>
-      </div>
-    </ModalBase>
-  );
-}
-
-function MiniCalendar({ selectedDates, onToggleDate }) {
-  const { lang } = useLang();
-  const todayIso = todayStr();
-  const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
-  const [viewDate, setViewDate] = useState(startOfMonth(new Date(todayIso + "T00:00:00")));
-
-  const year = viewDate.getFullYear();
-  const month = viewDate.getMonth();
-  const firstDay = new Date(year, month, 1);
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const leadingBlanks = firstDay.getDay(); // 0 = Sunday
-
-  const cells = [];
-  for (let i = 0; i < leadingBlanks; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
-
-  const toIso = (d) => {
-    const mm = String(month + 1).padStart(2, "0");
-    const dd = String(d).padStart(2, "0");
-    return `${year}-${mm}-${dd}`;
-  };
-
-  const isPast = (iso) => iso < todayIso;
-
-  const monthStartIso = toIso(1);
-  const currentMonthStartIso = `${todayStr().slice(0, 8)}01`;
-  const prevDisabled = monthStartIso <= currentMonthStartIso;
-
-  const goPrevMonth = () => {
-    if (prevDisabled) return;
-    setViewDate(new Date(year, month - 1, 1));
-  };
-  const goNextMonth = () => setViewDate(new Date(year, month + 1, 1));
-
-  return (
-    <div className="rounded-2xl p-3 hb-glass">
-      <div className="flex items-center justify-between mb-2 px-1">
-        <button
-          onClick={goPrevMonth}
-          disabled={prevDisabled}
-          className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60 disabled:opacity-25"
-        >
-          <ChevronLeft size={15} color={C.foreground} />
-        </button>
-        <span className="text-sm font-semibold" style={{ color: C.foreground }}>
-          {formatMonthTitle(year, month, lang)}
-        </span>
-        <button onClick={goNextMonth} className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60">
-          <ChevronRight size={15} color={C.foreground} />
-        </button>
-      </div>
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {WEEKDAYS[lang].map((d, i) => (
-          <div key={i} className="text-center text-[10px] font-medium py-1" style={{ color: C.mutedForeground }}>
-            {d}
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-7 gap-1">
-        {cells.map((d, i) => {
-          if (d === null) return <div key={i} />;
-          const iso = toIso(d);
-          const disabled = isPast(iso);
-          const selected = selectedDates.has(iso);
-          return (
-            <button
-              key={i}
-              disabled={disabled}
-              onClick={() => onToggleDate(iso)}
-              className="aspect-square rounded-lg flex items-center justify-center text-xs disabled:opacity-25"
-              style={{
-                background: selected ? C.primary : "rgba(255,255,255,0.06)",
-                color: selected ? C.primaryForeground : C.foreground,
-                fontWeight: selected ? 600 : 400,
-                ...mono,
-              }}
-            >
-              {d}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function CustomScheduleHabitModal({ onClose, onConfirm }) {
-  const { t } = useLang();
-  const [name, setName] = useState("");
-  const [value, setValue] = useState("");
-  const [selectedDates, setSelectedDates] = useState(new Set());
-  const [error, setError] = useState("");
-
-  const toggleDate = (iso) => {
-    setSelectedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(iso)) next.delete(iso);
-      else next.add(iso);
-      return next;
-    });
-  };
-
-  const submit = () => {
-    if (!name.trim() || !(Number(value) > 0)) return;
-    if (selectedDates.size === 0) {
-      setError(t("modal.noDaysSelected"));
-      return;
-    }
-    onConfirm(name.trim(), Number(value), Array.from(selectedDates));
-  };
-
-  return (
-    <ModalBase onClose={onClose}>
-      <ModalHeader title={t("modal.customHabitTitle")} onClose={onClose} />
-      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
-        {t("modal.name")}
-      </label>
-      <input
-        autoFocus
-        type="text"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder={t("modal.namePlaceholder")}
-        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-3 hb-glass"
-        style={{ color: C.foreground, ...body }}
-      />
-      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
-        {t("modal.valuePerCompletion")}
-      </label>
-      <input
-        type="number"
-        inputMode="numeric"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="500"
         className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
         style={{ color: C.foreground, ...mono }}
       />
-      <div className="flex items-center justify-between mb-1.5">
-        <label className="text-xs font-medium" style={{ color: C.mutedForeground }}>
-          {t("modal.selectDays")}
-        </label>
-        {selectedDates.size > 0 && (
-          <span className="text-xs" style={{ color: C.primary, ...mono }}>
-            {selectedDates.size} {t("modal.daysSelected")}
-          </span>
-        )}
+
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("modal.frequency")}
+      </label>
+      <div className="space-y-2 mb-4">
+        <FrequencyOption
+          selected={frequency === "daily"}
+          onClick={() => setFrequency("daily")}
+          icon={Flame}
+          label={t("habitType.daily")}
+          desc={t("habitType.dailyDesc")}
+        />
+        <FrequencyOption
+          selected={frequency === "date"}
+          onClick={() => setFrequency("date")}
+          icon={CalendarDays}
+          label={t("modal.exactDate")}
+          desc={t("modal.exactDateDesc")}
+        />
+        <FrequencyOption
+          selected={frequency === "weekly"}
+          onClick={() => setFrequency("weekly")}
+          icon={Repeat}
+          label={t("modal.customRecurrence")}
+          desc={t("modal.customRecurrenceDesc")}
+        />
       </div>
-      <div className="mb-4">
-        <MiniCalendar selectedDates={selectedDates} onToggleDate={toggleDate} />
-      </div>
+
+      {frequency === "date" && (
+        <input
+          type="date"
+          value={exactDate}
+          min={todayStr()}
+          onChange={(e) => setExactDate(e.target.value)}
+          className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
+          style={{ color: C.foreground, colorScheme: "dark", ...mono }}
+        />
+      )}
+
+      {frequency === "weekly" && (
+        <div className="flex items-center justify-between gap-1 mb-4">
+          {WEEKDAYS[lang].map((label, idx) => {
+            const selected = selectedWeekdays.has(idx);
+            return (
+              <button
+                key={idx}
+                onClick={() => toggleWeekday(idx)}
+                className="flex-1 aspect-square rounded-lg flex items-center justify-center text-xs"
+                style={{
+                  background: selected ? C.primary : "rgba(255,255,255,0.06)",
+                  color: selected ? C.primaryForeground : C.foreground,
+                  fontWeight: selected ? 600 : 400,
+                  ...mono,
+                }}
+              >
+                {label[0]}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {error && (
         <p className="text-xs mb-3" style={{ color: C.destructive }}>
           {error}
         </p>
       )}
+
       <button
         onClick={submit}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
@@ -1582,27 +1514,48 @@ function ConfirmUncheckModal({ habit, onClose, onConfirm }) {
   );
 }
 
+/* ------------------------------ Add-habit flow (shared) ------------------------- */
+
+function useAddHabitFlow(user, setHabits, showToast) {
+  const { t } = useLang();
+  const [showForm, setShowForm] = useState(false);
+
+  const handleCreateHabit = async ({ type, name, value_huf, scheduledDates, weekdays }) => {
+    setShowForm(false);
+    try {
+      let habit;
+      if (type === "daily") {
+        habit = await addDailyHabit(user.id, name, value_huf);
+      } else if (type === "custom") {
+        habit = await addCustomHabit(user.id, name, value_huf, scheduledDates);
+      } else {
+        habit = await addWeeklyHabit(user.id, name, value_huf, weekdays);
+      }
+      setHabits((prev) => [...prev, habit]);
+      showToast(t("toast.habitCreated"));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  return { showForm, setShowForm, handleCreateHabit };
+}
+
 /* ---------------------------------- Home page --------------------------------- */
 
-function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast }) {
+function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast }) {
   const { t, lang } = useLang();
   const [showTopUp, setShowTopUp] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
-  const [showChoice, setShowChoice] = useState(false);
-  const [showDailyModal, setShowDailyModal] = useState(false);
-  const [showCustomModal, setShowCustomModal] = useState(false);
+  const addFlow = useAddHabitFlow(user, setHabits, showToast);
   const [showManage, setShowManage] = useState(false);
   const [pendingUncheck, setPendingUncheck] = useState(null);
   const [checkingId, setCheckingId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayStr());
 
   const today = todayStr();
-  const activeHabits = habits.filter((h) => {
-    if (h.archived) return false;
-    if (h.type === "custom") return (h.scheduledDates || []).includes(selectedDate);
-    return true;
-  });
+  const activeHabits = habitsForDate(habits, selectedDate);
   const checkinsSelected = useMemo(
     () => new Set(checkins.filter((c) => c.completed_date === selectedDate).map((c) => c.habit_id)),
     [checkins, selectedDate]
@@ -1657,28 +1610,6 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
       setBalance(next);
       showToast(t("toast.withdrawComplete"));
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const handleAddDailyHabit = async (name, value_huf) => {
-    setShowDailyModal(false);
-    try {
-      const habit = await addDailyHabit(user.id, name, value_huf);
-      setHabits((prev) => [...prev, habit]);
-      showToast(t("toast.habitCreated"));
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const handleAddCustomHabit = async (name, value_huf, scheduledDates) => {
-    setShowCustomModal(false);
-    try {
-      const habit = await addCustomHabit(user.id, name, value_huf, scheduledDates);
-      setHabits((prev) => [...prev, habit]);
-      showToast(t("toast.habitCreated"));
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -1760,7 +1691,7 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <Header streak={streak} />
+      <Header streak={streak} onProfileClick={() => setTab("profile")} />
 
       <BalanceCard
         locked={balance.locked_amount}
@@ -1816,7 +1747,7 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
           <AddHabitsBox
             isToday={selectedDate === today}
             dateLabel={formatShortDate(selectedDate, lang)}
-            onClick={() => setShowChoice(true)}
+            onClick={() => addFlow.setShowForm(true)}
           />
         </div>
       )}
@@ -1850,26 +1781,12 @@ function HomePage({ user, habits, setHabits, checkins, setCheckins, balance, set
           onDeleteHabit={handleDeleteHabit}
           onAddNew={() => {
             setShowManage(false);
-            setShowChoice(true);
+            addFlow.setShowForm(true);
           }}
         />
       )}
-      {showChoice && (
-        <AddHabitChoiceModal
-          onClose={() => setShowChoice(false)}
-          onChooseDaily={() => {
-            setShowChoice(false);
-            setShowDailyModal(true);
-          }}
-          onChooseCustom={() => {
-            setShowChoice(false);
-            setShowCustomModal(true);
-          }}
-        />
-      )}
-      {showDailyModal && <AddHabitModal onClose={() => setShowDailyModal(false)} onConfirm={handleAddDailyHabit} />}
-      {showCustomModal && (
-        <CustomScheduleHabitModal onClose={() => setShowCustomModal(false)} onConfirm={handleAddCustomHabit} />
+      {addFlow.showForm && (
+        <AddHabitForm onClose={() => addFlow.setShowForm(false)} onConfirm={addFlow.handleCreateHabit} />
       )}
     </div>
   );
@@ -2055,6 +1972,319 @@ function ProfileRow({ icon, label, value }) {
   );
 }
 
+/* ------------------------------ Habit calendar page ----------------------------- */
+
+const habitsForDate = (habits, iso) =>
+  habits.filter((h) => {
+    if (h.archived) return false;
+    if (h.type === "custom") return (h.scheduledDates || []).includes(iso);
+    if (h.type === "weekly") return (h.weekdays || []).includes(new Date(iso + "T00:00:00").getDay());
+    return true;
+  });
+
+function HabitTag({ habit }) {
+  const { t } = useLang();
+  const displayName = habit.nameKey ? t(habit.nameKey) : habit.name;
+  return (
+    <span
+      className="block w-full truncate text-[9px] font-medium px-1.5 py-0.5 rounded-md mb-0.5"
+      style={{ background: "rgba(255,255,255,0.12)", color: C.foreground }}
+      title={displayName}
+    >
+      {displayName}
+    </span>
+  );
+}
+
+function CalendarViewToggle({ view, setView }) {
+  const { t } = useLang();
+  const options = [
+    { key: "monthly", label: t("calendar.monthly") },
+    { key: "weekly", label: t("calendar.weekly") },
+    { key: "daily", label: t("calendar.daily") },
+  ];
+  return (
+    <div className="flex rounded-full p-1 mb-4 hb-glass" style={{ background: "rgba(255,255,255,0.05)" }}>
+      {options.map((o) => {
+        const active = view === o.key;
+        return (
+          <button
+            key={o.key}
+            onClick={() => setView(o.key)}
+            className="flex-1 text-xs font-semibold py-2 rounded-full transition-opacity active:opacity-80"
+            style={{ background: active ? C.slatePill : "transparent", color: active ? "#F4F4F5" : C.mutedForeground }}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function HabitDayList({ dayHabits }) {
+  const { t } = useLang();
+  if (dayHabits.length === 0) {
+    return (
+      <p className="text-sm text-center py-6" style={{ color: C.mutedForeground }}>
+        {t("calendar.noHabitsThisDay")}
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      {dayHabits.map((h) => {
+        const displayName = h.nameKey ? t(h.nameKey) : h.name;
+        return (
+          <div
+            key={h.id}
+            className="flex items-center justify-between rounded-xl px-3.5 py-3"
+            style={{ background: "rgba(255,255,255,0.05)" }}
+          >
+            <span className="text-sm font-medium" style={{ color: C.foreground }}>
+              {displayName}
+            </span>
+            <span className="text-xs font-semibold" style={{ ...mono, color: C.mutedForeground }}>
+              {fmt(h.value_huf)} {t("currency")}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DayDetailModal({ dateIso, habits, onClose }) {
+  const { t, lang } = useLang();
+  const todayIso = todayStr();
+  const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
+  const dayHabits = habitsForDate(habits, dateIso);
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={title} onClose={onClose} />
+      <HabitDayList dayHabits={dayHabits} />
+    </ModalBase>
+  );
+}
+
+function MonthlyCalendarView({ habits }) {
+  const { lang } = useLang();
+  const todayIso = todayStr();
+  const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+  const [viewDate, setViewDate] = useState(startOfMonth(new Date(todayIso + "T00:00:00")));
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const leadingBlanks = firstDay.getDay();
+
+  const cells = [];
+  for (let i = 0; i < leadingBlanks; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+  const toIso = (d) => {
+    const mm = String(month + 1).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    return `${year}-${mm}-${dd}`;
+  };
+
+  const goPrevMonth = () => setViewDate(new Date(year, month - 1, 1));
+  const goNextMonth = () => setViewDate(new Date(year, month + 1, 1));
+
+  return (
+    <div className="rounded-2xl p-3 hb-glass">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <button
+          onClick={goPrevMonth}
+          className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60"
+        >
+          <ChevronLeft size={15} color={C.foreground} />
+        </button>
+        <span className="text-sm font-semibold" style={{ color: C.foreground }}>
+          {formatMonthTitle(year, month, lang)}
+        </span>
+        <button onClick={goNextMonth} className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60">
+          <ChevronRight size={15} color={C.foreground} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {WEEKDAYS[lang].map((d, i) => (
+          <div key={i} className="text-center text-[10px] font-medium py-1" style={{ color: C.mutedForeground }}>
+            {d}
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((d, i) => {
+          if (d === null) return <div key={i} />;
+          const iso = toIso(d);
+          const isToday = iso === todayIso;
+          const dayHabits = habitsForDate(habits, iso);
+          return (
+            <button
+              key={i}
+              onClick={() => setSelectedDay(iso)}
+              className="w-full text-left rounded-lg p-1 min-h-[54px] flex flex-col items-start active:opacity-70"
+              style={{
+                background: isToday ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.02)",
+                border: isToday ? `1px solid ${C.primary}55` : "1px solid transparent",
+              }}
+            >
+              <span
+                className="text-[10px] font-medium mb-0.5"
+                style={{ ...mono, color: isToday ? C.foreground : C.mutedForeground }}
+              >
+                {d}
+              </span>
+              {dayHabits.slice(0, 2).map((h) => (
+                <HabitTag key={h.id} habit={h} />
+              ))}
+              {dayHabits.length > 2 && (
+                <span className="text-[9px]" style={{ color: C.mutedForeground }}>
+                  +{dayHabits.length - 2}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {selectedDay && (
+        <DayDetailModal dateIso={selectedDay} habits={habits} onClose={() => setSelectedDay(null)} />
+      )}
+    </div>
+  );
+}
+
+function WeeklyCalendarView({ habits }) {
+  const { lang } = useLang();
+  const todayIso = todayStr();
+  const [weekStart, setWeekStart] = useState(() => shiftDateStr(todayIso, -new Date(todayIso + "T00:00:00").getDay()));
+  const [selectedDay, setSelectedDay] = useState(null);
+
+  const days = [];
+  for (let i = 0; i < 7; i++) days.push(shiftDateStr(weekStart, i));
+
+  const goPrevWeek = () => setWeekStart((w) => shiftDateStr(w, -7));
+  const goNextWeek = () => setWeekStart((w) => shiftDateStr(w, 7));
+
+  return (
+    <div className="rounded-2xl p-3 hb-glass">
+      <div className="flex items-center justify-between mb-3 px-1">
+        <button onClick={goPrevWeek} className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60">
+          <ChevronLeft size={15} color={C.foreground} />
+        </button>
+        <span className="text-sm font-semibold" style={{ color: C.foreground }}>
+          {formatShortDate(days[0], lang)} – {formatShortDate(days[6], lang)}
+        </span>
+        <button onClick={goNextWeek} className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60">
+          <ChevronRight size={15} color={C.foreground} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((iso) => {
+          const isToday = iso === todayIso;
+          const dayHabits = habitsForDate(habits, iso);
+          return (
+            <button
+              key={iso}
+              onClick={() => setSelectedDay(iso)}
+              className="w-full rounded-lg p-1 min-h-[120px] flex flex-col items-center active:opacity-70"
+              style={{
+                background: isToday ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.02)",
+                border: isToday ? `1px solid ${C.primary}55` : "1px solid transparent",
+              }}
+            >
+              <span className="text-[9px] font-medium mt-0.5" style={{ color: C.mutedForeground }}>
+                {dayAbbrev(iso, lang)}
+              </span>
+              <span
+                className="text-xs font-semibold mb-1"
+                style={{ ...mono, color: isToday ? C.foreground : C.mutedForeground }}
+              >
+                {dayNum(iso)}
+              </span>
+              <div className="w-full">
+                {dayHabits.map((h) => (
+                  <HabitTag key={h.id} habit={h} />
+                ))}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {selectedDay && (
+        <DayDetailModal dateIso={selectedDay} habits={habits} onClose={() => setSelectedDay(null)} />
+      )}
+    </div>
+  );
+}
+
+function DailyCalendarView({ habits }) {
+  const { t, lang } = useLang();
+  const todayIso = todayStr();
+  const [selectedDate, setSelectedDate] = useState(todayIso);
+  const dayHabits = habitsForDate(habits, selectedDate);
+
+  return (
+    <div className="rounded-2xl p-4 hb-glass">
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={() => setSelectedDate((d) => shiftDateStr(d, -1))}
+          className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60"
+        >
+          <ChevronLeft size={15} color={C.foreground} />
+        </button>
+        <span className="text-sm font-semibold" style={{ color: C.foreground }}>
+          {selectedDate === todayIso ? t("calendar.today") : formatShortDate(selectedDate, lang)}
+        </span>
+        <button
+          onClick={() => setSelectedDate((d) => shiftDateStr(d, 1))}
+          className="w-7 h-7 rounded-lg flex items-center justify-center active:opacity-60"
+        >
+          <ChevronRight size={15} color={C.foreground} />
+        </button>
+      </div>
+      <HabitDayList dayHabits={dayHabits} />
+    </div>
+  );
+}
+
+function HabitCalendarPage({ user, habits, setHabits, showToast }) {
+  const { t } = useLang();
+  const [view, setView] = useState("monthly");
+  const addFlow = useAddHabitFlow(user, setHabits, showToast);
+
+  return (
+    <div className="max-w-lg mx-auto px-4 pb-20">
+      <div className="flex items-center justify-between py-4">
+        <span className="text-xl tracking-wide" style={heading}>
+          {t("calendar.title")}
+        </span>
+        <button
+          onClick={() => addFlow.setShowForm(true)}
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full hb-glass active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          <Plus size={13} />
+          {t("calendar.addHabits")}
+        </button>
+      </div>
+
+      <CalendarViewToggle view={view} setView={setView} />
+
+      {view === "monthly" && <MonthlyCalendarView habits={habits} />}
+      {view === "weekly" && <WeeklyCalendarView habits={habits} />}
+      {view === "daily" && <DailyCalendarView habits={habits} />}
+
+      {addFlow.showForm && (
+        <AddHabitForm onClose={() => addFlow.setShowForm(false)} onConfirm={addFlow.handleCreateHabit} />
+      )}
+    </div>
+  );
+}
+
 /* ---------------------------------- App layout --------------------------------- */
 
 function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast }) {
@@ -2064,6 +2294,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
       {tab === "home" && (
         <HomePage
           user={user}
+          setTab={setTab}
           habits={habits}
           setHabits={setHabits}
           checkins={checkins}
@@ -2074,6 +2305,9 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
         />
       )}
       {tab === "analytics" && <AnalyticsPage checkins={checkins} habits={habits} withdrawable={balance.withdrawable_amount} />}
+      {tab === "calendar" && (
+        <HabitCalendarPage user={user} habits={habits} setHabits={setHabits} showToast={showToast} />
+      )}
       {tab === "profile" && <ProfilePage user={user} onLogout={onLogout} />}
       <BottomNav tab={tab} setTab={setTab} />
     </div>
