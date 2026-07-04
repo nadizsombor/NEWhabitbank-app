@@ -8,6 +8,7 @@ const fromDbHabit = (h) => ({
   archived: h.archived,
   scheduledDates: h.scheduled_dates || [],
   weekdays: h.weekdays || [],
+  excludedDates: h.excluded_dates || [],
 });
 
 export async function loadUserData(userId) {
@@ -93,5 +94,10 @@ export async function updateHabit(habitId, { name, value_huf }) {
 
 export async function deleteHabit(habitId) {
   const { error } = await supabase.from("habits").delete().eq("id", habitId);
+  if (error) throw error;
+}
+
+export async function setHabitExcludedDates(habitId, excludedDates) {
+  const { error } = await supabase.from("habits").update({ excluded_dates: excludedDates }).eq("id", habitId);
   if (error) throw error;
 }

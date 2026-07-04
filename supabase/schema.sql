@@ -24,6 +24,8 @@ create table if not exists public.balances (
 -- type: 'daily' (every day), 'custom' (explicit one-off dates, incl. a
 -- single-date "exact date" habit), 'weekly' (recurs on specific weekdays,
 -- 0=Sunday..6=Saturday, stored in the weekdays column).
+-- excluded_dates: individual occurrences removed from a recurring ('daily'
+-- or 'weekly') habit via the day editor's "remove from this day only".
 create table if not exists public.habits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
@@ -32,6 +34,7 @@ create table if not exists public.habits (
   type text not null default 'daily' check (type in ('daily', 'custom', 'weekly')),
   scheduled_dates date[] not null default '{}',
   weekdays integer[] not null default '{}',
+  excluded_dates date[] not null default '{}',
   archived boolean not null default false,
   created_at timestamptz not null default now()
 );

@@ -48,24 +48,18 @@ import {
   removeCheckin,
   updateHabit,
   deleteHabit,
+  setHabitExcludedDates,
 } from "./lib/api";
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap');
   .hb-glass {
     position: relative;
     overflow: hidden;
-    background: rgba(255,255,255,0.055);
-    backdrop-filter: blur(64px) saturate(150%);
-    -webkit-backdrop-filter: blur(64px) saturate(150%);
-    border: 1px solid rgba(255,255,255,0.14);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 0 1px rgba(255,255,255,0.08), 0 20px 50px -20px rgba(0,0,0,0.85);
+    background: #FFFFFF;
+    border: 1px solid #E9E9E7;
   }
-  .hb-glass::after {
-    content: "";
-    position: absolute;
-    inset: -60% -20%;
-    background: linear-gradient(125deg, transparent 32%, rgba(255,255,255,0.16) 46%, rgba(255,255,255,0.04) 53%, transparent 64%);
-    pointer-events: none;
+  .hb-glass:hover {
+    background: #F5F5F4;
   }
 `;
 
@@ -77,17 +71,14 @@ function AmbientBackground() {
         style={{
           position: "absolute",
           inset: 0,
-          backgroundImage: `url(${bgImage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          backgroundRepeat: "no-repeat",
+          background: "#FFFFFF",
         }}
       />
       <div
         style={{
           position: "absolute",
           inset: 0,
-          background: "rgba(0,0,0,0.55)",
+          background: "transparent",
         }}
       />
     </div>
@@ -97,20 +88,20 @@ function AmbientBackground() {
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 const C = {
-  background: "#000000",
-  foreground: "#F7F7FA",
-  card: "rgba(255,255,255,0.045)",
-  primary: "#D1D1D6",
-  primaryForeground: "#0A0A0A",
-  secondary: "#8ECAE6",
-  secondaryForeground: "#0A0A0A",
-  muted: "rgba(255,255,255,0.07)",
-  mutedForeground: "rgba(247,247,250,0.62)",
-  accent: "#8ECAE6",
-  destructive: "#FF7A7A",
-  destructiveForeground: "#0A0A0A",
-  border: "rgba(255,255,255,0.16)",
-  slatePill: "rgba(140,151,163,0.4)",
+  background: "#FFFFFF",
+  foreground: "#191919",
+  card: "#FFFFFF",
+  primary: "#191919",
+  primaryForeground: "#FFFFFF",
+  secondary: "#F1F1EF",
+  secondaryForeground: "#191919",
+  muted: "#F7F7F5",
+  mutedForeground: "#787774",
+  accent: "#787774",
+  destructive: "#E03E3E",
+  destructiveForeground: "#FFFFFF",
+  border: "#E9E9E7",
+  slatePill: "transparent",
 };
 
 const heading = { fontFamily: SYSTEM_FONT, fontWeight: 700, letterSpacing: "-0.015em" };
@@ -240,6 +231,24 @@ const TRANSLATIONS = {
   "modal.confirm": { en: "Confirm", hu: "Megerősítés" },
   "modal.cancel": { en: "Cancel", hu: "Mégse" },
   "modal.delete": { en: "Delete", hu: "Törlés" },
+  "modal.confirmRecurringDeleteTitle": { en: "Delete habit?", hu: "Törlöd a szokást?" },
+  "modal.confirmRecurringDeleteDesc": {
+    en: "This is a recurring habit. Remove it from just this day, or delete it completely?",
+    hu: "Ez egy visszatérő szokás. Csak erről a napról távolítsd el, vagy töröld teljesen?",
+  },
+  "modal.deleteThisDayOnly": { en: "Remove from this day only", hu: "Eltávolítás csak erről a napról" },
+  "modal.deleteEntireHabit": { en: "Delete entire habit", hu: "Teljes szokás törlése" },
+  "calendar.addHabitForDay": { en: "Add habit for this day", hu: "Szokás hozzáadása erre a napra" },
+  "calendar.editDay": { en: "Edit day", hu: "Nap szerkesztése" },
+  "calendar.resetCalendar": { en: "Reset Calendar", hu: "Naptár visszaállítása" },
+  "modal.resetCalendarTitle": { en: "Reset Calendar", hu: "Naptár visszaállítása" },
+  "modal.resetCalendarWarning": { en: "This cannot be undone.", hu: "Ez nem vonható vissza." },
+  "modal.resetCalendarDesc": {
+    en: "This permanently deletes all your habits and their check-in history. Type RESET to confirm.",
+    hu: "Ez véglegesen törli az összes szokásodat és a hozzájuk tartozó check-in előzményeket. Írd be, hogy RESET a megerősítéshez.",
+  },
+  "modal.resetCalendarConfirm": { en: "Delete Everything", hu: "Minden törlése" },
+  "toast.calendarReset": { en: "Calendar reset", hu: "Naptár visszaállítva" },
   "analytics.title": { en: "Analytics", hu: "Statisztika" },
   "analytics.comingSoon": { en: "Analytics coming soon", hu: "A statisztika hamarosan érkezik" },
   "analytics.subtitle": { en: "Your balance growth, day by day", hu: "Az egyenleged gyarapodása napról napra" },
@@ -326,11 +335,11 @@ function Toast({ toast }) {
   const isError = toast.type === "error";
   return (
     <div
-      className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90%] px-4 py-3 rounded-2xl shadow-lg flex items-center gap-2 animate-[fadeIn_0.2s_ease] hb-glass`}
+      className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90%] px-4 py-3 rounded-2xl flex items-center gap-2 animate-[fadeIn_0.2s_ease] hb-glass`}
       style={{
         position: "fixed",
-        background: isError ? "rgba(255,122,122,0.16)" : "rgba(10,10,12,0.65)",
-        color: isError ? "#FFD9D9" : C.foreground,
+        background: isError ? "#FDECEC" : "#FFFFFF",
+        color: isError ? C.destructive : C.foreground,
         ...body,
       }}
     >
@@ -456,7 +465,7 @@ function LoginPage({ goto, showToast }) {
         onClick={submit}
         disabled={busy}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium mb-3 transition-opacity active:opacity-70 disabled:opacity-60 flex items-center justify-center gap-2"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {busy && <Loader2 size={15} className="animate-spin" />}
         {busy ? t("auth.loggingIn") : t("auth.logIn")}
@@ -524,7 +533,7 @@ function RegisterPage({ goto, showToast }) {
           <button
             onClick={() => goto("login")}
             className="hb-glass w-full h-12 rounded-xl text-sm font-medium"
-            style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+            style={{ background: "transparent", color: C.foreground }}
           >
             {t("forgot.backToLogin")}
           </button>
@@ -556,7 +565,7 @@ function RegisterPage({ goto, showToast }) {
         onClick={submitForm}
         disabled={busy}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium mb-3 mt-1 transition-opacity active:opacity-70 disabled:opacity-60 flex items-center justify-center gap-2"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {busy && <Loader2 size={15} className="animate-spin" />}
         {busy ? t("auth.creatingAccount") : t("auth.register")}
@@ -644,7 +653,7 @@ function ForgotPasswordPage({ goto, showToast }) {
         onClick={submit}
         disabled={busy}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-70 disabled:opacity-60 flex items-center justify-center gap-2"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {busy && <Loader2 size={15} className="animate-spin" />}
         {t("forgot.sendLink")}
@@ -704,7 +713,7 @@ function ResetPasswordPage({ goto, showToast }) {
         onClick={submit}
         disabled={busy}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-70 disabled:opacity-60 flex items-center justify-center gap-2"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {busy && <Loader2 size={15} className="animate-spin" />}
         {busy ? t("reset.saving") : t("reset.resetPassword")}
@@ -727,8 +736,7 @@ function BottomNav({ tab, setTab }) {
       className="fixed bottom-0 left-0 right-0 h-16 z-40 hb-glass"
       style={{
         position: "fixed",
-        borderTop: "1px solid rgba(255,255,255,0.14)",
-        boxShadow: "0 -1px 0 rgba(255,255,255,0.1), 0 -12px 30px -14px rgba(0,0,0,0.7)",
+        borderTop: `1px solid ${C.border}`,
       }}
     >
       <div className="max-w-lg mx-auto h-full flex items-stretch">
@@ -760,15 +768,13 @@ function Header({ streak, onProfileClick }) {
       <button
         onClick={onProfileClick}
         className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70"
-        style={{ background: "rgba(255,255,255,0.09)" }}
       >
-        <User size={17} color="#F2F2F5" />
+        <User size={17} color={C.foreground} />
       </button>
       <div
         className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hb-glass"
-        style={{ background: "rgba(255,255,255,0.07)" }}
       >
-        <Flame size={14} color="#E4E4E7" />
+        <Flame size={14} color={C.foreground} />
         <span className="text-xs font-semibold" style={{ color: C.foreground, ...mono }}>
           {streak}
         </span>
@@ -804,7 +810,7 @@ function BalanceCard({ locked, withdrawable, onTopUp, onWithdraw, onUnlock }) {
         <button
           onClick={onWithdraw}
           className="mt-4 px-7 py-2.5 rounded-full text-sm font-semibold transition-opacity active:opacity-80"
-          style={{ background: C.slatePill, color: "#F4F4F5" }}
+          style={{ background: "transparent", color: C.foreground, border: `1px solid ${C.border}` }}
         >
           {t("balance.withdraw")}
         </button>
@@ -825,24 +831,24 @@ function BalanceCard({ locked, withdrawable, onTopUp, onWithdraw, onUnlock }) {
             {t("currency")}
           </span>
         </div>
-        <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: "rgba(255,255,255,0.1)" }}>
+        <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: C.muted }}>
           <div
             className="h-full rounded-full transition-all"
-            style={{ width: `${percent}%`, background: "#E4E4E7" }}
+            style={{ width: `${percent}%`, background: C.primary }}
           />
         </div>
         <div className="flex gap-2.5">
           <button
             onClick={onTopUp}
             className="flex-1 h-10 rounded-full text-sm font-semibold transition-opacity active:opacity-80"
-            style={{ background: C.slatePill, color: "#F4F4F5" }}
+            style={{ background: "transparent", color: C.foreground, border: `1px solid ${C.border}` }}
           >
             {t("balance.invest")}
           </button>
           <button
             onClick={onUnlock}
             className="flex-1 h-10 rounded-full text-sm font-semibold transition-opacity active:opacity-80"
-            style={{ background: C.slatePill, color: "#F4F4F5" }}
+            style={{ background: "transparent", color: C.foreground, border: `1px solid ${C.border}` }}
           >
             {t("balance.unlock")}
           </button>
@@ -857,7 +863,7 @@ function BalanceCard({ locked, withdrawable, onTopUp, onWithdraw, onUnlock }) {
 function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle }) {
   const { t } = useLang();
   const displayName = habit.nameKey ? t(habit.nameKey) : habit.name;
-  const rowTextColor = checked ? "#18181B" : C.foreground;
+  const rowTextColor = C.foreground;
   const nonInteractive = locked || (disabled && !checked) || loading;
   return (
     <button
@@ -865,7 +871,7 @@ function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle })
       disabled={nonInteractive}
       className={`w-full flex items-center justify-between rounded-3xl px-4 py-4 transition-all ${checked ? "" : "hb-glass"} ${locked ? "cursor-not-allowed" : ""}`}
       style={{
-        background: checked ? "rgba(228,228,231,0.94)" : "rgba(255,255,255,0.045)",
+        background: checked ? "#F1F1EF" : "#FFFFFF",
         opacity: disabled && !checked ? 0.45 : 1,
       }}
     >
@@ -873,24 +879,24 @@ function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle })
         <div
           className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 border-2"
           style={{
-            background: checked ? "#18181B" : "transparent",
-            borderColor: checked ? "#18181B" : "rgba(255,255,255,0.35)",
+            background: checked ? C.primary : "transparent",
+            borderColor: checked ? C.primary : C.border,
           }}
         >
           {loading ? (
-            <Loader2 size={13} className="animate-spin" color={checked ? "#18181B" : C.mutedForeground} />
+            <Loader2 size={13} className="animate-spin" color={checked ? C.primaryForeground : C.mutedForeground} />
           ) : (
-            checked && <Check size={14} color="#F4F4F5" strokeWidth={3} />
+            checked && <Check size={14} color={C.primaryForeground} strokeWidth={3} />
           )}
         </div>
         <span className="text-sm font-semibold" style={{ color: rowTextColor, ...body }}>
           {displayName}
         </span>
-        {locked && <Lock size={12} color="#3F3F46" />}
+        {locked && <Lock size={12} color={C.mutedForeground} />}
       </div>
       <span
         className="text-xs font-semibold px-3 py-1.5 rounded-full"
-        style={{ ...mono, color: "#E4E4E7", background: "rgba(0,0,0,0.35)" }}
+        style={{ ...mono, color: C.foreground, background: C.muted }}
       >
         {fmt(habit.value_huf)} <span className="text-[10px] font-sans">{t("currency")}</span>
       </span>
@@ -922,13 +928,13 @@ function WeekStrip({ checkins, selectedDate, onSelect }) {
           bg = C.primary;
           textColor = C.primaryForeground;
         } else if (isToday) {
-          bg = "rgba(255,255,255,0.20)";
+          bg = "#F1F1EF";
           textColor = C.foreground;
         } else if (isFuture) {
-          bg = "rgba(255,255,255,0.10)";
+          bg = "#F7F7F5";
           textColor = C.foreground;
         } else {
-          bg = "rgba(255,255,255,0.025)";
+          bg = "#FFFFFF";
           textColor = C.mutedForeground;
         }
 
@@ -973,14 +979,14 @@ function AddHabitsBox({ isToday, dateLabel, onClick }) {
     <button
       onClick={onClick}
       className="w-full rounded-2xl py-14 flex flex-col items-center justify-center gap-4 text-center transition-opacity active:opacity-70"
-      style={{ border: "1.5px dashed rgba(255,255,255,0.3)" }}
+      style={{ border: `1.5px dashed ${C.border}` }}
     >
       <span className="text-sm font-semibold" style={{ color: C.foreground, ...body }}>
         {isToday ? t("home.addHabitsToday") : `${t("home.addHabitsFor")} ${dateLabel}`}
       </span>
       <div
         className="w-9 h-9 rounded-full flex items-center justify-center border-2"
-        style={{ borderColor: "rgba(255,255,255,0.4)" }}
+        style={{ borderColor: C.border }}
       >
         <Plus size={18} color={C.foreground} />
       </div>
@@ -1048,7 +1054,7 @@ function TopUpModal({ onClose, onConfirm }) {
             key={c}
             onClick={() => setAmount(String(c))}
             className="hb-glass px-3 py-1.5 rounded-lg text-xs font-medium"
-            style={{ background: "rgba(142,202,230,0.14)", color: C.foreground, ...mono }}
+            style={{ background: "transparent", color: C.foreground, ...mono }}
           >
             {fmt(c)}
           </button>
@@ -1057,7 +1063,7 @@ function TopUpModal({ onClose, onConfirm }) {
       <button
         onClick={() => amount && Number(amount) > 0 && onConfirm(Number(amount))}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {t("modal.confirmTopUp")}
       </button>
@@ -1084,7 +1090,7 @@ function WithdrawModal({ withdrawable, onClose, onConfirm }) {
       <button
         onClick={onConfirm}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {t("modal.confirmWithdraw")}
       </button>
@@ -1114,7 +1120,7 @@ function UnlockModal({ locked, onClose, onConfirm }) {
       <button
         onClick={onConfirm}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {t("modal.confirmUnlock")}
       </button>
@@ -1128,13 +1134,13 @@ function FrequencyOption({ selected, onClick, icon: Icon, label, desc }) {
       onClick={onClick}
       className="w-full text-left px-4 py-3.5 rounded-2xl hb-glass transition-opacity active:opacity-80 flex items-center gap-3"
       style={{
-        background: selected ? "rgba(209,209,214,0.14)" : "rgba(255,255,255,0.03)",
-        border: selected ? `1px solid ${C.primary}66` : "1px solid transparent",
+        background: selected ? "#F1F1EF" : "transparent",
+        border: selected ? `1px solid ${C.primary}` : "1px solid transparent",
       }}
     >
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: selected ? C.primary : "rgba(255,255,255,0.08)" }}
+        style={{ background: selected ? C.primary : "#F1F1EF" }}
       >
         <Icon size={16} color={selected ? C.primaryForeground : C.foreground} />
       </div>
@@ -1251,7 +1257,7 @@ function AddHabitForm({ onClose, onConfirm }) {
           min={todayStr()}
           onChange={(e) => setExactDate(e.target.value)}
           className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
-          style={{ color: C.foreground, colorScheme: "dark", ...mono }}
+          style={{ color: C.foreground, colorScheme: "light", ...mono }}
         />
       )}
 
@@ -1265,7 +1271,7 @@ function AddHabitForm({ onClose, onConfirm }) {
                 onClick={() => toggleWeekday(idx)}
                 className="flex-1 aspect-square rounded-lg flex items-center justify-center text-xs"
                 style={{
-                  background: selected ? C.primary : "rgba(255,255,255,0.06)",
+                  background: selected ? C.primary : "#F7F7F5",
                   color: selected ? C.primaryForeground : C.foreground,
                   fontWeight: selected ? 600 : 400,
                   ...mono,
@@ -1287,7 +1293,7 @@ function AddHabitForm({ onClose, onConfirm }) {
       <button
         onClick={submit}
         className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
-        style={{ background: "rgba(209,209,214,0.14)", color: C.foreground }}
+        style={{ background: "transparent", color: C.foreground }}
       >
         {t("modal.createHabit")}
       </button>
@@ -1314,7 +1320,7 @@ function ManageHabitRow({ habit, onRename, onValueChange, onRequestDelete }) {
         value={habit.value_huf}
         onChange={(e) => onValueChange(habit.id, Number(e.target.value) || 0)}
         className="w-20 bg-transparent outline-none text-sm text-right rounded-lg px-2 py-1"
-        style={{ color: C.foreground, background: "rgba(0,0,0,0.3)", ...mono }}
+        style={{ color: C.foreground, background: C.muted, ...mono }}
       />
       <span className="text-[10px] font-sans shrink-0" style={{ color: C.mutedForeground }}>
         {t("currency")}
@@ -1322,7 +1328,7 @@ function ManageHabitRow({ habit, onRename, onValueChange, onRequestDelete }) {
       <button
         onClick={() => onRequestDelete(habit)}
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
-        style={{ background: "rgba(255,122,122,0.12)" }}
+        style={{ background: "#FDECEC" }}
       >
         <Trash2 size={14} color={C.destructive} />
       </button>
@@ -1352,7 +1358,7 @@ function ConfirmDeleteHabitModal({ habitName, onClose, onConfirm }) {
         <button
           onClick={onConfirm}
           className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
-          style={{ background: C.destructive, color: "#2A0A0A" }}
+          style={{ background: C.destructive, color: C.destructiveForeground }}
         >
           {t("modal.delete")}
         </button>
@@ -1437,7 +1443,7 @@ function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAd
           onClick={handleSave}
           disabled={saving}
           className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
-          style={{ background: C.slatePill, color: "#F4F4F5" }}
+          style={{ background: "transparent", color: C.foreground, border: `1px solid ${C.border}` }}
         >
           {saving && <Loader2 size={14} className="animate-spin" />}
           {t("modal.save")}
@@ -1505,7 +1511,7 @@ function ConfirmUncheckModal({ habit, onClose, onConfirm }) {
         <button
           onClick={onConfirm}
           className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
-          style={{ background: C.slatePill, color: "#F4F4F5" }}
+          style={{ background: "transparent", color: C.foreground, border: `1px solid ${C.border}` }}
         >
           {t("modal.confirm")}
         </button>
@@ -1799,13 +1805,13 @@ function ChartTooltip({ active, payload, label, lang, t }) {
   const amount = payload[0].value;
   return (
     <div
-      className="px-3 py-2 rounded-xl shadow-lg pointer-events-none hb-glass"
-      style={{ background: "rgba(10,10,12,0.75)", ...body }}
+      className="px-3 py-2 rounded-xl pointer-events-none hb-glass"
+      style={{ ...body }}
     >
-      <div className="text-sm font-semibold" style={{ ...mono, color: "#FFFFFF" }}>
-        {fmt(amount)} <span className="text-xs font-sans" style={{ color: "#C9CDD1" }}>{t("currency")}</span>
+      <div className="text-sm font-semibold" style={{ ...mono, color: C.foreground }}>
+        {fmt(amount)} <span className="text-xs font-sans" style={{ color: C.mutedForeground }}>{t("currency")}</span>
       </div>
-      <div className="text-[11px] mt-0.5" style={{ color: "#ADB5BD" }}>
+      <div className="text-[11px] mt-0.5" style={{ color: C.mutedForeground }}>
         {formatShortDate(label, lang)}
       </div>
     </div>
@@ -1957,7 +1963,7 @@ function ProfileRow({ icon, label, value }) {
   return (
     <div
       className="flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b"
-      style={{ borderColor: "rgba(255,255,255,0.1)" }}
+      style={{ borderColor: C.border }}
     >
       {icon}
       <div className="flex-1 flex items-center justify-between">
@@ -1977,6 +1983,7 @@ function ProfileRow({ icon, label, value }) {
 const habitsForDate = (habits, iso) =>
   habits.filter((h) => {
     if (h.archived) return false;
+    if ((h.excludedDates || []).includes(iso)) return false;
     if (h.type === "custom") return (h.scheduledDates || []).includes(iso);
     if (h.type === "weekly") return (h.weekdays || []).includes(new Date(iso + "T00:00:00").getDay());
     return true;
@@ -1988,7 +1995,7 @@ function HabitTag({ habit }) {
   return (
     <span
       className="block w-full truncate text-[9px] font-medium px-1.5 py-0.5 rounded-md mb-0.5"
-      style={{ background: "rgba(255,255,255,0.12)", color: C.foreground }}
+      style={{ background: C.muted, color: C.foreground }}
       title={displayName}
     >
       {displayName}
@@ -2004,7 +2011,7 @@ function CalendarViewToggle({ view, setView }) {
     { key: "daily", label: t("calendar.daily") },
   ];
   return (
-    <div className="flex rounded-full p-1 mb-4 hb-glass" style={{ background: "rgba(255,255,255,0.05)" }}>
+    <div className="flex rounded-full p-1 mb-4 hb-glass" style={{ background: C.muted }}>
       {options.map((o) => {
         const active = view === o.key;
         return (
@@ -2012,7 +2019,7 @@ function CalendarViewToggle({ view, setView }) {
             key={o.key}
             onClick={() => setView(o.key)}
             className="flex-1 text-xs font-semibold py-2 rounded-full transition-opacity active:opacity-80"
-            style={{ background: active ? C.slatePill : "transparent", color: active ? "#F4F4F5" : C.mutedForeground }}
+            style={{ background: active ? "#FFFFFF" : "transparent", color: active ? C.foreground : C.mutedForeground }}
           >
             {o.label}
           </button>
@@ -2039,7 +2046,7 @@ function HabitDayList({ dayHabits }) {
           <div
             key={h.id}
             className="flex items-center justify-between rounded-xl px-3.5 py-3"
-            style={{ background: "rgba(255,255,255,0.05)" }}
+            style={{ background: C.muted }}
           >
             <span className="text-sm font-medium" style={{ color: C.foreground }}>
               {displayName}
@@ -2054,20 +2061,298 @@ function HabitDayList({ dayHabits }) {
   );
 }
 
-function DayDetailModal({ dateIso, habits, onClose }) {
-  const { t, lang } = useLang();
-  const todayIso = todayStr();
-  const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
-  const dayHabits = habitsForDate(habits, dateIso);
+function ConfirmRecurringDeleteModal({ habitName, onClose, onDeleteThisDay, onDeleteAll }) {
+  const { t } = useLang();
   return (
     <ModalBase onClose={onClose}>
-      <ModalHeader title={title} onClose={onClose} />
-      <HabitDayList dayHabits={dayHabits} />
+      <ModalHeader title={t("modal.confirmRecurringDeleteTitle")} onClose={onClose} />
+      <p className="text-sm mb-1" style={{ color: C.foreground, ...body }}>
+        {habitName}
+      </p>
+      <p className="text-xs mb-5" style={{ color: C.mutedForeground }}>
+        {t("modal.confirmRecurringDeleteDesc")}
+      </p>
+      <div className="space-y-2">
+        <button
+          onClick={onDeleteThisDay}
+          className="w-full h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.deleteThisDayOnly")}
+        </button>
+        <button
+          onClick={onDeleteAll}
+          className="w-full h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ background: "transparent", color: C.destructive, border: `1px solid ${C.border}` }}
+        >
+          {t("modal.deleteEntireHabit")}
+        </button>
+        <button
+          onClick={onClose}
+          className="w-full h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ color: C.mutedForeground }}
+        >
+          {t("modal.cancel")}
+        </button>
+      </div>
     </ModalBase>
   );
 }
 
-function MonthlyCalendarView({ habits }) {
+function AddHabitForDayForm({ dateLabel, onClose, onConfirm }) {
+  const { t } = useLang();
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+
+  const submit = () => {
+    if (!name.trim() || !(Number(value) > 0)) return;
+    onConfirm(name.trim(), Number(value));
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={`${t("calendar.addHabitForDay")} — ${dateLabel}`} onClose={onClose} />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("modal.name")}
+      </label>
+      <input
+        autoFocus
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder={t("modal.namePlaceholder")}
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-3 hb-glass"
+        style={{ color: C.foreground, ...body }}
+      />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("modal.valuePerCompletion")}
+      </label>
+      <input
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="500"
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-5 hb-glass"
+        style={{ color: C.foreground, ...mono }}
+      />
+      <button
+        onClick={submit}
+        className="hb-glass w-full h-12 rounded-xl text-sm font-medium transition-opacity active:opacity-80"
+        style={{ background: "transparent", color: C.foreground }}
+      >
+        {t("modal.createHabit")}
+      </button>
+    </ModalBase>
+  );
+}
+
+function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToast, onClose }) {
+  const { t, lang } = useLang();
+  const todayIso = todayStr();
+  const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
+  const dayHabits = useMemo(() => habitsForDate(habits, dateIso), [habits, dateIso]);
+  const [draftHabits, setDraftHabits] = useState(() => dayHabits.map((h) => ({ ...h })));
+  const [pendingRecurringDelete, setPendingRecurringDelete] = useState(null);
+  const [pendingSimpleDelete, setPendingSimpleDelete] = useState(null);
+  const [showAddForDay, setShowAddForDay] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleRename = (id, name) => {
+    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, name } : h)));
+  };
+  const handleValueChange = (id, value_huf) => {
+    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_huf } : h)));
+  };
+
+  const handleRequestDelete = (habit) => {
+    if (habit.type === "daily" || habit.type === "weekly") {
+      setPendingRecurringDelete(habit);
+    } else {
+      setPendingSimpleDelete(habit);
+    }
+  };
+
+  const handleDeleteThisDayOnly = async (habit) => {
+    setPendingRecurringDelete(null);
+    setDraftHabits((prev) => prev.filter((h) => h.id !== habit.id));
+    try {
+      const nextExcluded = [...(habit.excludedDates || []), dateIso];
+      await setHabitExcludedDates(habit.id, nextExcluded);
+      setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, excludedDates: nextExcluded } : h)));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleDeleteEntireHabit = async (habit) => {
+    setPendingRecurringDelete(null);
+    setPendingSimpleDelete(null);
+    setDraftHabits((prev) => prev.filter((h) => h.id !== habit.id));
+    try {
+      await deleteHabit(habit.id);
+      setHabits((prev) => prev.filter((h) => h.id !== habit.id));
+      setCheckins((prev) => prev.filter((c) => c.habit_id !== habit.id));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleAddForDay = async (name, value_huf) => {
+    setShowAddForDay(false);
+    try {
+      const habit = await addCustomHabit(user.id, name, value_huf, [dateIso]);
+      setHabits((prev) => [...prev, habit]);
+      setDraftHabits((prev) => [...prev, habit]);
+      showToast(t("toast.habitCreated"));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const changed = draftHabits.filter((d) => {
+      const original = habits.find((h) => h.id === d.id);
+      return (
+        original &&
+        (original.name !== d.name || original.value_huf !== d.value_huf) &&
+        d.name.trim() &&
+        d.value_huf > 0
+      );
+    });
+    if (changed.length > 0) {
+      try {
+        await Promise.all(changed.map((h) => updateHabit(h.id, { name: h.name, value_huf: h.value_huf })));
+        setHabits((prev) =>
+          prev.map((h) => {
+            const c = changed.find((x) => x.id === h.id);
+            return c ? { ...h, name: c.name, value_huf: c.value_huf } : h;
+          })
+        );
+      } catch (e) {
+        showToast(e.message, "error");
+      }
+    }
+    setSaving(false);
+    onClose();
+  };
+
+  const pendingHabitName = (habit) => (habit.nameKey ? t(habit.nameKey) : habit.name);
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={title} onClose={onClose} />
+      {draftHabits.length === 0 ? (
+        <p className="text-sm text-center py-6" style={{ color: C.mutedForeground }}>
+          {t("calendar.noHabitsThisDay")}
+        </p>
+      ) : (
+        <div className="space-y-2 mb-4">
+          {draftHabits.map((h) => (
+            <ManageHabitRow
+              key={h.id}
+              habit={h}
+              onRename={handleRename}
+              onValueChange={handleValueChange}
+              onRequestDelete={handleRequestDelete}
+            />
+          ))}
+        </div>
+      )}
+      <button
+        onClick={() => setShowAddForDay(true)}
+        className="w-full flex items-center justify-center gap-1.5 text-sm font-medium py-3 rounded-xl mb-3 hb-glass active:opacity-80"
+        style={{ color: C.foreground }}
+      >
+        <Plus size={14} />
+        {t("calendar.addHabitForDay")}
+      </button>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ color: C.foreground }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+
+      {showAddForDay && (
+        <AddHabitForDayForm dateLabel={title} onClose={() => setShowAddForDay(false)} onConfirm={handleAddForDay} />
+      )}
+      {pendingRecurringDelete && (
+        <ConfirmRecurringDeleteModal
+          habitName={pendingHabitName(pendingRecurringDelete)}
+          onClose={() => setPendingRecurringDelete(null)}
+          onDeleteThisDay={() => handleDeleteThisDayOnly(pendingRecurringDelete)}
+          onDeleteAll={() => handleDeleteEntireHabit(pendingRecurringDelete)}
+        />
+      )}
+      {pendingSimpleDelete && (
+        <ConfirmDeleteHabitModal
+          habitName={pendingHabitName(pendingSimpleDelete)}
+          onClose={() => setPendingSimpleDelete(null)}
+          onConfirm={() => handleDeleteEntireHabit(pendingSimpleDelete)}
+        />
+      )}
+    </ModalBase>
+  );
+}
+
+function ResetCalendarModal({ onClose, onConfirm }) {
+  const { t } = useLang();
+  const [confirmText, setConfirmText] = useState("");
+  const [resetting, setResetting] = useState(false);
+  const canConfirm = confirmText.trim().toUpperCase() === "RESET";
+
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    setResetting(true);
+    await onConfirm();
+    setResetting(false);
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.resetCalendarTitle")} onClose={onClose} />
+      <p className="text-sm font-semibold mb-1" style={{ color: C.destructive }}>
+        {t("modal.resetCalendarWarning")}
+      </p>
+      <p className="text-xs mb-4" style={{ color: C.mutedForeground }}>
+        {t("modal.resetCalendarDesc")}
+      </p>
+      <input
+        type="text"
+        value={confirmText}
+        onChange={(e) => setConfirmText(e.target.value)}
+        placeholder="RESET"
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
+        style={{ color: C.foreground, ...mono }}
+      />
+      <button
+        onClick={handleConfirm}
+        disabled={!canConfirm || resetting}
+        className="w-full h-12 rounded-xl text-sm font-semibold disabled:opacity-40 transition-opacity active:opacity-80 flex items-center justify-center gap-2"
+        style={{ background: C.destructive, color: C.destructiveForeground }}
+      >
+        {resetting && <Loader2 size={15} className="animate-spin" />}
+        {t("modal.resetCalendarConfirm")}
+      </button>
+    </ModalBase>
+  );
+}
+
+function MonthlyCalendarView({ habits, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
   const todayIso = todayStr();
   const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
@@ -2128,7 +2413,7 @@ function MonthlyCalendarView({ habits }) {
               onClick={() => setSelectedDay(iso)}
               className="w-full text-left rounded-lg p-1 min-h-[54px] flex flex-col items-start active:opacity-70"
               style={{
-                background: isToday ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.02)",
+                background: isToday ? "#F1F1EF" : "transparent",
                 border: isToday ? `1px solid ${C.primary}55` : "1px solid transparent",
               }}
             >
@@ -2151,13 +2436,21 @@ function MonthlyCalendarView({ habits }) {
         })}
       </div>
       {selectedDay && (
-        <DayDetailModal dateIso={selectedDay} habits={habits} onClose={() => setSelectedDay(null)} />
+        <DayEditorModal
+          dateIso={selectedDay}
+          habits={habits}
+          user={user}
+          setHabits={setHabits}
+          setCheckins={setCheckins}
+          showToast={showToast}
+          onClose={() => setSelectedDay(null)}
+        />
       )}
     </div>
   );
 }
 
-function WeeklyCalendarView({ habits }) {
+function WeeklyCalendarView({ habits, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
   const todayIso = todayStr();
   const [weekStart, setWeekStart] = useState(() => shiftDateStr(todayIso, -new Date(todayIso + "T00:00:00").getDay()));
@@ -2192,7 +2485,7 @@ function WeeklyCalendarView({ habits }) {
               onClick={() => setSelectedDay(iso)}
               className="w-full rounded-lg p-1 min-h-[120px] flex flex-col items-center active:opacity-70"
               style={{
-                background: isToday ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.02)",
+                background: isToday ? "#F1F1EF" : "transparent",
                 border: isToday ? `1px solid ${C.primary}55` : "1px solid transparent",
               }}
             >
@@ -2215,16 +2508,25 @@ function WeeklyCalendarView({ habits }) {
         })}
       </div>
       {selectedDay && (
-        <DayDetailModal dateIso={selectedDay} habits={habits} onClose={() => setSelectedDay(null)} />
+        <DayEditorModal
+          dateIso={selectedDay}
+          habits={habits}
+          user={user}
+          setHabits={setHabits}
+          setCheckins={setCheckins}
+          showToast={showToast}
+          onClose={() => setSelectedDay(null)}
+        />
       )}
     </div>
   );
 }
 
-function DailyCalendarView({ habits }) {
+function DailyCalendarView({ habits, user, setHabits, setCheckins, showToast }) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const [selectedDate, setSelectedDate] = useState(todayIso);
+  const [editing, setEditing] = useState(false);
   const dayHabits = habitsForDate(habits, selectedDate);
 
   return (
@@ -2247,39 +2549,84 @@ function DailyCalendarView({ habits }) {
         </button>
       </div>
       <HabitDayList dayHabits={dayHabits} />
+      <button
+        onClick={() => setEditing(true)}
+        className="w-full flex items-center justify-center gap-1.5 text-xs font-semibold py-2.5 rounded-xl mt-3 hb-glass active:opacity-80"
+        style={{ color: C.foreground }}
+      >
+        <SlidersHorizontal size={13} />
+        {t("calendar.editDay")}
+      </button>
+      {editing && (
+        <DayEditorModal
+          dateIso={selectedDate}
+          habits={habits}
+          user={user}
+          setHabits={setHabits}
+          setCheckins={setCheckins}
+          showToast={showToast}
+          onClose={() => setEditing(false)}
+        />
+      )}
     </div>
   );
 }
 
-function HabitCalendarPage({ user, habits, setHabits, showToast }) {
+function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, showToast }) {
   const { t } = useLang();
   const [view, setView] = useState("monthly");
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const addFlow = useAddHabitFlow(user, setHabits, showToast);
+
+  const handleResetCalendar = async () => {
+    try {
+      await Promise.all(habits.map((h) => deleteHabit(h.id)));
+      setHabits([]);
+      setCheckins([]);
+      setShowResetConfirm(false);
+      showToast(t("toast.calendarReset"));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const viewProps = { habits, user, setHabits, setCheckins, showToast };
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <div className="flex items-center justify-between py-4">
+      <div className="py-4">
         <span className="text-xl tracking-wide" style={heading}>
           {t("calendar.title")}
         </span>
-        <button
-          onClick={() => addFlow.setShowForm(true)}
-          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full hb-glass active:opacity-80"
-          style={{ color: C.foreground }}
-        >
-          <Plus size={13} />
-          {t("calendar.addHabits")}
-        </button>
       </div>
 
       <CalendarViewToggle view={view} setView={setView} />
 
-      {view === "monthly" && <MonthlyCalendarView habits={habits} />}
-      {view === "weekly" && <WeeklyCalendarView habits={habits} />}
-      {view === "daily" && <DailyCalendarView habits={habits} />}
+      {view === "monthly" && <MonthlyCalendarView {...viewProps} />}
+      {view === "weekly" && <WeeklyCalendarView {...viewProps} />}
+      {view === "daily" && <DailyCalendarView {...viewProps} />}
+
+      <button
+        onClick={() => addFlow.setShowForm(true)}
+        className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold py-3 rounded-xl mt-4 hb-glass active:opacity-80"
+        style={{ color: C.foreground }}
+      >
+        <Plus size={14} />
+        {t("calendar.addHabits")}
+      </button>
+      <button
+        onClick={() => setShowResetConfirm(true)}
+        className="w-full text-xs font-medium py-3 mt-1 active:opacity-70"
+        style={{ color: C.destructive }}
+      >
+        {t("calendar.resetCalendar")}
+      </button>
 
       {addFlow.showForm && (
         <AddHabitForm onClose={() => addFlow.setShowForm(false)} onConfirm={addFlow.handleCreateHabit} />
+      )}
+      {showResetConfirm && (
+        <ResetCalendarModal onClose={() => setShowResetConfirm(false)} onConfirm={handleResetCalendar} />
       )}
     </div>
   );
@@ -2306,7 +2653,14 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
       )}
       {tab === "analytics" && <AnalyticsPage checkins={checkins} habits={habits} withdrawable={balance.withdrawable_amount} />}
       {tab === "calendar" && (
-        <HabitCalendarPage user={user} habits={habits} setHabits={setHabits} showToast={showToast} />
+        <HabitCalendarPage
+          user={user}
+          habits={habits}
+          setHabits={setHabits}
+          checkins={checkins}
+          setCheckins={setCheckins}
+          showToast={showToast}
+        />
       )}
       {tab === "profile" && <ProfilePage user={user} onLogout={onLogout} />}
       <BottomNav tab={tab} setTab={setTab} />
