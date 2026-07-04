@@ -247,7 +247,7 @@ const TRANSLATIONS = {
   "modal.customRecurrenceDesc": { en: "Pick specific days of the week", hu: "Válaszd ki a hét konkrét napjait" },
   "modal.noWeekdaysSelected": { en: "Pick at least one day of the week", hu: "Válassz ki legalább egy napot a hétből" },
   "home.dailySavedLabel": { en: "Saved today", hu: "Ma megtakarítva" },
-  "home.manageHabits": { en: "Add or manage habits", hu: "Szokások hozzáadása / kezelése" },
+  "home.manageHabits": { en: "Manage habits", hu: "Szokások kezelése" },
   "modal.manageHabitsTitle": { en: "Manage Habits", hu: "Szokások kezelése" },
   "modal.addNewHabitRow": { en: "Add new habit", hu: "Új szokás hozzáadása" },
   "modal.save": { en: "Save", hu: "Mentés" },
@@ -257,6 +257,12 @@ const TRANSLATIONS = {
     en: "The money for this habit will move back to your locked balance.",
     hu: "Ennek a szokásnak az összege visszakerül a zárolt egyenlegbe.",
   },
+  "modal.confirmPastCheckinDesc": {
+    en: "Are you sure you want to check off this past activity? Important: checking off past habits is final — you won't be able to undo or change it later.",
+    hu: "Biztosan ki szeretnéd pipálni ezt a múltbéli tevékenységet? Fontos: a múltbeli szokások utólagos kipipálása végleges, ezt később már nem tudod visszavonni vagy módosítani.",
+  },
+  "modal.cancelPastCheckin": { en: "Cancel", hu: "Mégsem" },
+  "modal.confirmPastCheckin": { en: "Check off", hu: "Kipipálás" },
   "modal.confirmDeleteHabitTitle": { en: "Delete habit?", hu: "Törlöd a szokást?" },
   "modal.confirmDeleteHabitDesc": {
     en: "This permanently deletes the habit and all of its check-in history.",
@@ -312,9 +318,14 @@ const toLocalISODate = (d) => {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 };
-const todayStr = () => toLocalISODate(new Date());
+// The "logical day" rolls over at 02:00 local time instead of midnight, so
+// e.g. Tuesday 01:30 still counts as Monday, while Tuesday 02:01 is Tuesday.
+// Computed by simply subtracting 2 hours from the real current time.
+const LOGICAL_DAY_ROLLOVER_HOURS = 2;
+const logicalNow = () => new Date(Date.now() - LOGICAL_DAY_ROLLOVER_HOURS * 60 * 60 * 1000);
+const todayStr = () => toLocalISODate(logicalNow());
 const daysAgoStr = (n) => {
-  const d = new Date();
+  const d = logicalNow();
   d.setDate(d.getDate() - n);
   return toLocalISODate(d);
 };
@@ -907,10 +918,10 @@ function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle })
     <button
       onClick={() => !nonInteractive && onToggle(habit)}
       disabled={nonInteractive}
-      className={`w-full flex items-center justify-between rounded-3xl px-4 py-4 transition-all ${checked ? "" : "hb-glass"} ${locked ? "cursor-not-allowed" : ""}`}
+      className={`w-full flex items-center justify-between rounded-3xl px-4 py-4 ${checked ? "" : "hb-glass"} ${locked ? "cursor-not-allowed" : "transition-all"}`}
       style={{
         background: checked ? C.secondary : C.card,
-        opacity: disabled && !checked ? 0.45 : 1,
+        opacity: locked ? 0.55 : disabled && !checked ? 0.45 : 1,
       }}
     >
       <div className="flex items-center gap-3">
@@ -1391,6 +1402,33 @@ function ManageHabitRow({ habit, onRename, onValueChange, onRequestDelete }) {
   );
 }
 
+function LockedManageHabitRow({ habit }) {
+  const { t } = useLang();
+  const displayName = habit.nameKey ? t(habit.nameKey) : habit.name;
+  return (
+    <div
+      className="flex items-center gap-2 rounded-2xl px-3 py-2.5 hb-glass"
+      style={{ opacity: 0.55, cursor: "not-allowed" }}
+    >
+      <span className="flex-1 min-w-0 truncate text-sm font-medium" style={{ color: C.foreground, ...body }}>
+        {displayName}
+      </span>
+      <span
+        className="w-20 text-sm text-right rounded-lg px-2 py-1"
+        style={{ color: C.foreground, background: C.muted, ...mono }}
+      >
+        {habit.value_huf}
+      </span>
+      <span className="text-[10px] font-sans shrink-0" style={{ color: C.mutedForeground }}>
+        {t("currency")}
+      </span>
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
+        <Lock size={14} color={C.mutedForeground} />
+      </div>
+    </div>
+  );
+}
+
 function ConfirmDeleteHabitModal({ habitName, onClose, onConfirm }) {
   const { t } = useLang();
   return (
@@ -1580,6 +1618,35 @@ function ConfirmUncheckModal({ habit, onClose, onConfirm }) {
   );
 }
 
+function ConfirmPastCheckinModal({ habit, onClose, onConfirm }) {
+  const { t } = useLang();
+  const displayName = habit.nameKey ? t(habit.nameKey) : habit.name;
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={displayName} onClose={onClose} />
+      <p className="text-sm mb-5" style={{ color: C.mutedForeground, ...body }}>
+        {t("modal.confirmPastCheckinDesc")}
+      </p>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancelPastCheckin")}
+        </button>
+        <button
+          onClick={onConfirm}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80"
+          style={{ background: C.primary, color: C.primaryForeground }}
+        >
+          {t("modal.confirmPastCheckin")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
 /* ------------------------------ Add-habit flow (shared) ------------------------- */
 
 function useAddHabitFlow(user, setHabits, showToast) {
@@ -1617,6 +1684,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   const addFlow = useAddHabitFlow(user, setHabits, showToast);
   const [showManage, setShowManage] = useState(false);
   const [pendingUncheck, setPendingUncheck] = useState(null);
+  const [pendingPastCheckin, setPendingPastCheckin] = useState(null);
   const [checkingId, setCheckingId] = useState(null);
   const [selectedDate, setSelectedDate] = useState(todayStr());
 
@@ -1724,20 +1792,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     setCheckingId(null);
   };
 
-  const handleToggle = async (habit) => {
-    const isChecked = checkinsSelected.has(habit.id);
-    const isPast = selectedDate < today;
-
-    if (isChecked) {
-      if (isPast) return; // locked: past check-ins can't be modified
-      setPendingUncheck(habit);
-      return;
-    }
-
-    if (balance.locked_amount < habit.value_huf) {
-      showToast(t("toast.insufficientBalance"), "error");
-      return;
-    }
+  const performCheckin = async (habit) => {
     setCheckingId(habit.id);
     const next = {
       locked_amount: balance.locked_amount - habit.value_huf,
@@ -1753,6 +1808,29 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
       showToast(e.message, "error");
     }
     setCheckingId(null);
+  };
+
+  const handleToggle = async (habit) => {
+    const isChecked = checkinsSelected.has(habit.id);
+    const isPast = selectedDate < today;
+
+    if (isChecked) {
+      if (isPast) return; // locked: past check-ins can't be modified
+      setPendingUncheck(habit);
+      return;
+    }
+
+    if (balance.locked_amount < habit.value_huf) {
+      showToast(t("toast.insufficientBalance"), "error");
+      return;
+    }
+
+    if (isPast) {
+      setPendingPastCheckin(habit);
+      return;
+    }
+
+    await performCheckin(habit);
   };
 
   return (
@@ -1837,6 +1915,16 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
           onConfirm={() => {
             performUncheck(pendingUncheck);
             setPendingUncheck(null);
+          }}
+        />
+      )}
+      {pendingPastCheckin && (
+        <ConfirmPastCheckinModal
+          habit={pendingPastCheckin}
+          onClose={() => setPendingPastCheckin(null)}
+          onConfirm={() => {
+            performCheckin(pendingPastCheckin);
+            setPendingPastCheckin(null);
           }}
         />
       )}
@@ -2240,11 +2328,14 @@ function AddHabitForDayForm({ dateLabel, onClose, onConfirm }) {
   );
 }
 
-function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToast, onClose }) {
+function DayEditorModal({ dateIso, habits, checkins, user, setHabits, setCheckins, showToast, onClose }) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
   const dayHabits = useMemo(() => habitsForDate(habits, dateIso), [habits, dateIso]);
+  const isPastDay = dateIso < todayIso;
+  const isHabitLocked = (habitId) =>
+    isPastDay && checkins.some((c) => c.habit_id === habitId && c.completed_date === dateIso);
 
   const [mode, setMode] = useState("view"); // view | edit
   const [draftHabits, setDraftHabits] = useState([]);
@@ -2356,15 +2447,19 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
         </p>
       ) : mode === "edit" ? (
         <div className="space-y-2 mb-4">
-          {listToShow.map((h) => (
-            <ManageHabitRow
-              key={h.id}
-              habit={h}
-              onRename={handleRename}
-              onValueChange={handleValueChange}
-              onRequestDelete={handleRequestDelete}
-            />
-          ))}
+          {listToShow.map((h) =>
+            isHabitLocked(h.id) ? (
+              <LockedManageHabitRow key={h.id} habit={h} />
+            ) : (
+              <ManageHabitRow
+                key={h.id}
+                habit={h}
+                onRename={handleRename}
+                onValueChange={handleValueChange}
+                onRequestDelete={handleRequestDelete}
+              />
+            )
+          )}
         </div>
       ) : (
         <HabitDayList dayHabits={listToShow} />
@@ -2473,7 +2568,7 @@ function ResetCalendarModal({ onClose, onConfirm }) {
   );
 }
 
-function MonthlyCalendarView({ habits, user, setHabits, setCheckins, showToast }) {
+function MonthlyCalendarView({ habits, checkins, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
   const todayIso = todayStr();
   const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
@@ -2560,6 +2655,7 @@ function MonthlyCalendarView({ habits, user, setHabits, setCheckins, showToast }
         <DayEditorModal
           dateIso={selectedDay}
           habits={habits}
+          checkins={checkins}
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
@@ -2571,7 +2667,7 @@ function MonthlyCalendarView({ habits, user, setHabits, setCheckins, showToast }
   );
 }
 
-function WeeklyCalendarView({ habits, user, setHabits, setCheckins, showToast }) {
+function WeeklyCalendarView({ habits, checkins, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
   const todayIso = todayStr();
   const [weekStart, setWeekStart] = useState(() => shiftDateStr(todayIso, -new Date(todayIso + "T00:00:00").getDay()));
@@ -2632,6 +2728,7 @@ function WeeklyCalendarView({ habits, user, setHabits, setCheckins, showToast })
         <DayEditorModal
           dateIso={selectedDay}
           habits={habits}
+          checkins={checkins}
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
@@ -2643,7 +2740,7 @@ function WeeklyCalendarView({ habits, user, setHabits, setCheckins, showToast })
   );
 }
 
-function DailyCalendarView({ habits, user, setHabits, setCheckins, showToast }) {
+function DailyCalendarView({ habits, checkins, user, setHabits, setCheckins, showToast }) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const [selectedDate, setSelectedDate] = useState(todayIso);
@@ -2682,6 +2779,7 @@ function DailyCalendarView({ habits, user, setHabits, setCheckins, showToast }) 
         <DayEditorModal
           dateIso={selectedDate}
           habits={habits}
+          checkins={checkins}
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
@@ -2711,7 +2809,7 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, sho
     }
   };
 
-  const viewProps = { habits, user, setHabits, setCheckins, showToast };
+  const viewProps = { habits, checkins, user, setHabits, setCheckins, showToast };
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
