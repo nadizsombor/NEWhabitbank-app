@@ -23,6 +23,8 @@ import {
   Trash2,
   SlidersHorizontal,
   Repeat,
+  Sun,
+  Moon,
 } from "lucide-react";
 
 import {
@@ -61,6 +63,13 @@ const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter
   .hb-glass:hover {
     background: #F5F5F4;
   }
+  .dark .hb-glass {
+    background: #1F1F1F;
+    border: 1px solid #333333;
+  }
+  .dark .hb-glass:hover {
+    background: #262626;
+  }
 `;
 
 
@@ -71,7 +80,7 @@ function AmbientBackground() {
         style={{
           position: "absolute",
           inset: 0,
-          background: "#FFFFFF",
+          background: C.background,
         }}
       />
       <div
@@ -87,7 +96,7 @@ function AmbientBackground() {
 
 const SYSTEM_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
-const C = {
+const LIGHT_COLORS = {
   background: "#FFFFFF",
   foreground: "#191919",
   card: "#FFFFFF",
@@ -100,9 +109,33 @@ const C = {
   accent: "#787774",
   destructive: "#E03E3E",
   destructiveForeground: "#FFFFFF",
+  destructiveMuted: "#FDECEC",
   border: "#E9E9E7",
   slatePill: "transparent",
 };
+
+const DARK_COLORS = {
+  background: "#171717",
+  foreground: "#F5F5F5",
+  card: "#1F1F1F",
+  primary: "#F5F5F5",
+  primaryForeground: "#171717",
+  secondary: "#2A2A2A",
+  secondaryForeground: "#F5F5F5",
+  muted: "#262626",
+  mutedForeground: "#A3A3A3",
+  accent: "#A3A3A3",
+  destructive: "#F87171",
+  destructiveForeground: "#171717",
+  destructiveMuted: "#3A2020",
+  border: "#333333",
+  slatePill: "transparent",
+};
+
+// Mutated (not re-created) on every App() render so every component reading
+// C.xxx during its own render picks up the current theme's values without
+// needing its own theme subscription - see App()'s render body.
+let C = LIGHT_COLORS;
 
 const heading = { fontFamily: SYSTEM_FONT, fontWeight: 700, letterSpacing: "-0.015em" };
 const mono = { fontFamily: "'Roboto Mono', monospace" };
@@ -218,6 +251,7 @@ const TRANSLATIONS = {
   "modal.manageHabitsTitle": { en: "Manage Habits", hu: "Szokások kezelése" },
   "modal.addNewHabitRow": { en: "Add new habit", hu: "Új szokás hozzáadása" },
   "modal.save": { en: "Save", hu: "Mentés" },
+  "modal.edit": { en: "Edit", hu: "Szerkesztés" },
   "modal.confirmUncheckTitle": { en: "Undo check-in?", hu: "Visszavonod a pipát?" },
   "modal.confirmUncheckDesc": {
     en: "The money for this habit will move back to your locked balance.",
@@ -258,6 +292,7 @@ const TRANSLATIONS = {
   "profile.roleUser": { en: "User", hu: "Felhasználó" },
   "profile.memberSince": { en: "Member since", hu: "Tag óta" },
   "profile.logout": { en: "Log Out", hu: "Kijelentkezés" },
+  "profile.darkMode": { en: "Dark Mode", hu: "Sötét mód" },
   "habit.workout": { en: "Workout", hu: "Edzés" },
   "habit.read": { en: "Read", hu: "Olvasás" },
   "habit.meditate": { en: "Meditate", hu: "Meditáció" },
@@ -266,6 +301,9 @@ const TRANSLATIONS = {
 const LangContext = React.createContext({ lang: "en", setLang: () => {}, t: (k) => k });
 const useLang = () => React.useContext(LangContext);
 const makeT = (lang) => (key) => TRANSLATIONS[key] ? TRANSLATIONS[key][lang] : key;
+
+const ThemeContext = React.createContext({ theme: "light", setTheme: () => {} });
+const useTheme = () => React.useContext(ThemeContext);
 
 const fmt = (n) => Math.round(n || 0).toLocaleString("hu-HU");
 const toLocalISODate = (d) => {
@@ -338,7 +376,7 @@ function Toast({ toast }) {
       className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] max-w-[90%] px-4 py-3 rounded-2xl flex items-center gap-2 animate-[fadeIn_0.2s_ease] hb-glass`}
       style={{
         position: "fixed",
-        background: isError ? "#FDECEC" : "#FFFFFF",
+        background: isError ? C.destructiveMuted : C.card,
         color: isError ? C.destructive : C.foreground,
         ...body,
       }}
@@ -871,7 +909,7 @@ function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle })
       disabled={nonInteractive}
       className={`w-full flex items-center justify-between rounded-3xl px-4 py-4 transition-all ${checked ? "" : "hb-glass"} ${locked ? "cursor-not-allowed" : ""}`}
       style={{
-        background: checked ? "#F1F1EF" : "#FFFFFF",
+        background: checked ? C.secondary : C.card,
         opacity: disabled && !checked ? 0.45 : 1,
       }}
     >
@@ -928,13 +966,13 @@ function WeekStrip({ checkins, selectedDate, onSelect }) {
           bg = C.primary;
           textColor = C.primaryForeground;
         } else if (isToday) {
-          bg = "#F1F1EF";
+          bg = C.secondary;
           textColor = C.foreground;
         } else if (isFuture) {
-          bg = "#F7F7F5";
+          bg = C.muted;
           textColor = C.foreground;
         } else {
-          bg = "#FFFFFF";
+          bg = C.card;
           textColor = C.mutedForeground;
         }
 
@@ -972,6 +1010,22 @@ function WeekStrip({ checkins, selectedDate, onSelect }) {
 }
 
 /* ------------------------------ Add habits box -------------------------------- */
+
+function AddHabitCard({ onClick }) {
+  const { t } = useLang();
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center justify-center gap-2 rounded-3xl px-4 py-4 transition-opacity active:opacity-70"
+      style={{ border: `1.5px dashed ${C.border}`, background: C.muted }}
+    >
+      <Plus size={16} color={C.mutedForeground} />
+      <span className="text-sm font-semibold" style={{ color: C.mutedForeground, ...body }}>
+        {t("home.addHabit")}
+      </span>
+    </button>
+  );
+}
 
 function AddHabitsBox({ isToday, dateLabel, onClick }) {
   const { t } = useLang();
@@ -1134,13 +1188,13 @@ function FrequencyOption({ selected, onClick, icon: Icon, label, desc }) {
       onClick={onClick}
       className="w-full text-left px-4 py-3.5 rounded-2xl hb-glass transition-opacity active:opacity-80 flex items-center gap-3"
       style={{
-        background: selected ? "#F1F1EF" : "transparent",
+        background: selected ? C.secondary : "transparent",
         border: selected ? `1px solid ${C.primary}` : "1px solid transparent",
       }}
     >
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: selected ? C.primary : "#F1F1EF" }}
+        style={{ background: selected ? C.primary : C.secondary }}
       >
         <Icon size={16} color={selected ? C.primaryForeground : C.foreground} />
       </div>
@@ -1158,6 +1212,7 @@ function FrequencyOption({ selected, onClick, icon: Icon, label, desc }) {
 
 function AddHabitForm({ onClose, onConfirm }) {
   const { t, lang } = useLang();
+  const { theme } = useTheme();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [frequency, setFrequency] = useState("daily"); // daily | date | weekly
@@ -1257,7 +1312,7 @@ function AddHabitForm({ onClose, onConfirm }) {
           min={todayStr()}
           onChange={(e) => setExactDate(e.target.value)}
           className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
-          style={{ color: C.foreground, colorScheme: "light", ...mono }}
+          style={{ color: C.foreground, colorScheme: theme, ...mono }}
         />
       )}
 
@@ -1271,7 +1326,7 @@ function AddHabitForm({ onClose, onConfirm }) {
                 onClick={() => toggleWeekday(idx)}
                 className="flex-1 aspect-square rounded-lg flex items-center justify-center text-xs"
                 style={{
-                  background: selected ? C.primary : "#F7F7F5",
+                  background: selected ? C.primary : C.muted,
                   color: selected ? C.primaryForeground : C.foreground,
                   fontWeight: selected ? 600 : 400,
                   ...mono,
@@ -1328,7 +1383,7 @@ function ManageHabitRow({ habit, onRename, onValueChange, onRequestDelete }) {
       <button
         onClick={() => onRequestDelete(habit)}
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
-        style={{ background: "#FDECEC" }}
+        style={{ background: C.destructiveMuted }}
       >
         <Trash2 size={14} color={C.destructive} />
       </button>
@@ -1371,6 +1426,7 @@ function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAd
   const { t } = useLang();
   const [draftHabits, setDraftHabits] = useState(() => habits.map((h) => ({ ...h })));
   const [pendingDelete, setPendingDelete] = useState(null);
+  const [pendingDeleteIds, setPendingDeleteIds] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const handleRename = (id, name) => {
@@ -1380,15 +1436,19 @@ function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAd
     setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_huf } : h)));
   };
 
-  const handleConfirmDelete = async () => {
+  // Deletion is only queued here; nothing is persisted until Save.
+  const handleConfirmDelete = () => {
     const id = pendingDelete.id;
     setPendingDelete(null);
     setDraftHabits((prev) => prev.filter((h) => h.id !== id));
-    await onDeleteHabit(id);
+    setPendingDeleteIds((prev) => [...prev, id]);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    if (pendingDeleteIds.length > 0) {
+      await Promise.all(pendingDeleteIds.map((id) => onDeleteHabit(id)));
+    }
     const changed = draftHabits.filter((d) => {
       const original = habits.find((h) => h.id === d.id);
       return (
@@ -1398,7 +1458,7 @@ function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAd
         d.value_huf > 0
       );
     });
-    await onSaveChanges(changed);
+    if (changed.length > 0) await onSaveChanges(changed);
     setSaving(false);
     onClose();
   };
@@ -1744,11 +1804,12 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
                 onToggle={handleToggle}
               />
             ))}
+            <AddHabitCard onClick={() => addFlow.setShowForm(true)} />
           </div>
         </>
       )}
 
-      {habits.length === 0 && (
+      {activeHabits.length === 0 && (
         <div className="mt-3">
           <AddHabitsBox
             isToday={selectedDate === today}
@@ -1901,7 +1962,7 @@ function AnalyticsPage({ checkins, habits, withdrawable }) {
               strokeWidth={2.5}
               fill="url(#hbFill)"
               dot={{ r: 3, fill: C.primary, strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: C.primary, stroke: "#FFFFFF", strokeWidth: 2 }}
+              activeDot={{ r: 5, fill: C.primary, stroke: C.background, strokeWidth: 2 }}
             />
           </AreaChart>
         </ResponsiveContainer>
@@ -1946,6 +2007,7 @@ function ProfilePage({ user, onLogout }) {
         <ProfileRow icon={<Mail size={16} color={C.mutedForeground} />} label={t("profile.email")} value={user.email} />
         <ProfileRow icon={<Shield size={16} color={C.mutedForeground} />} label={t("profile.role")} value={t("profile.roleUser")} />
         <ProfileRow icon={<CalendarDays size={16} color={C.mutedForeground} />} label={t("profile.memberSince")} value={formatMemberSince(user.created_date, lang)} />
+        <ThemeToggleRow />
       </div>
 
       <button
@@ -1973,6 +2035,37 @@ function ProfileRow({ icon, label, value }) {
         <span className="text-sm font-medium" style={{ color: C.foreground }}>
           {value}
         </span>
+      </div>
+    </div>
+  );
+}
+
+function ThemeToggleRow() {
+  const { t } = useLang();
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b"
+      style={{ borderColor: C.border }}
+    >
+      {isDark ? <Moon size={16} color={C.mutedForeground} /> : <Sun size={16} color={C.mutedForeground} />}
+      <div className="flex-1 flex items-center justify-between">
+        <span className="text-sm" style={{ color: C.mutedForeground }}>
+          {t("profile.darkMode")}
+        </span>
+        <button
+          onClick={() => setTheme(isDark ? "light" : "dark")}
+          aria-label={t("profile.darkMode")}
+          className="w-11 h-6 rounded-full relative shrink-0 transition-colors"
+          style={{ background: isDark ? C.primary : C.border }}
+        >
+          <span
+            className="absolute top-0.5 w-5 h-5 rounded-full transition-all"
+            style={{ left: isDark ? "22px" : "2px", background: isDark ? C.primaryForeground : "#FFFFFF" }}
+          />
+        </button>
       </div>
     </div>
   );
@@ -2019,7 +2112,7 @@ function CalendarViewToggle({ view, setView }) {
             key={o.key}
             onClick={() => setView(o.key)}
             className="flex-1 text-xs font-semibold py-2 rounded-full transition-opacity active:opacity-80"
-            style={{ background: active ? "#FFFFFF" : "transparent", color: active ? C.foreground : C.mutedForeground }}
+            style={{ background: active ? C.card : "transparent", color: active ? C.foreground : C.mutedForeground }}
           >
             {o.label}
           </button>
@@ -2152,11 +2245,26 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
   const todayIso = todayStr();
   const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
   const dayHabits = useMemo(() => habitsForDate(habits, dateIso), [habits, dateIso]);
-  const [draftHabits, setDraftHabits] = useState(() => dayHabits.map((h) => ({ ...h })));
+
+  const [mode, setMode] = useState("view"); // view | edit
+  const [draftHabits, setDraftHabits] = useState([]);
+  const [pendingDeletions, setPendingDeletions] = useState([]); // [{ habit, scope: "thisDayOnly" | "entire" }]
   const [pendingRecurringDelete, setPendingRecurringDelete] = useState(null);
   const [pendingSimpleDelete, setPendingSimpleDelete] = useState(null);
   const [showAddForDay, setShowAddForDay] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const enterEditMode = () => {
+    setDraftHabits(dayHabits.map((h) => ({ ...h })));
+    setPendingDeletions([]);
+    setMode("edit");
+  };
+
+  const cancelEdit = () => {
+    setDraftHabits([]);
+    setPendingDeletions([]);
+    setMode("view");
+  };
 
   const handleRename = (id, name) => {
     setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, name } : h)));
@@ -2173,29 +2281,12 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
     }
   };
 
-  const handleDeleteThisDayOnly = async (habit) => {
-    setPendingRecurringDelete(null);
+  // Deletions are only queued locally here; nothing is persisted until Save.
+  const queueDeletion = (habit, scope) => {
+    setPendingDeletions((prev) => [...prev, { habit, scope }]);
     setDraftHabits((prev) => prev.filter((h) => h.id !== habit.id));
-    try {
-      const nextExcluded = [...(habit.excludedDates || []), dateIso];
-      await setHabitExcludedDates(habit.id, nextExcluded);
-      setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, excludedDates: nextExcluded } : h)));
-    } catch (e) {
-      showToast(e.message, "error");
-    }
-  };
-
-  const handleDeleteEntireHabit = async (habit) => {
     setPendingRecurringDelete(null);
     setPendingSimpleDelete(null);
-    setDraftHabits((prev) => prev.filter((h) => h.id !== habit.id));
-    try {
-      await deleteHabit(habit.id);
-      setHabits((prev) => prev.filter((h) => h.id !== habit.id));
-      setCheckins((prev) => prev.filter((c) => c.habit_id !== habit.id));
-    } catch (e) {
-      showToast(e.message, "error");
-    }
   };
 
   const handleAddForDay = async (name, value_huf) => {
@@ -2203,7 +2294,7 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
     try {
       const habit = await addCustomHabit(user.id, name, value_huf, [dateIso]);
       setHabits((prev) => [...prev, habit]);
-      setDraftHabits((prev) => [...prev, habit]);
+      if (mode === "edit") setDraftHabits((prev) => [...prev, habit]);
       showToast(t("toast.habitCreated"));
     } catch (e) {
       showToast(e.message, "error");
@@ -2212,17 +2303,29 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
 
   const handleSave = async () => {
     setSaving(true);
-    const changed = draftHabits.filter((d) => {
-      const original = habits.find((h) => h.id === d.id);
-      return (
-        original &&
-        (original.name !== d.name || original.value_huf !== d.value_huf) &&
-        d.name.trim() &&
-        d.value_huf > 0
-      );
-    });
-    if (changed.length > 0) {
-      try {
+    try {
+      for (const { habit, scope } of pendingDeletions) {
+        if (scope === "entire") {
+          await deleteHabit(habit.id);
+          setHabits((prev) => prev.filter((h) => h.id !== habit.id));
+          setCheckins((prev) => prev.filter((c) => c.habit_id !== habit.id));
+        } else {
+          const nextExcluded = [...(habit.excludedDates || []), dateIso];
+          await setHabitExcludedDates(habit.id, nextExcluded);
+          setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, excludedDates: nextExcluded } : h)));
+        }
+      }
+
+      const changed = draftHabits.filter((d) => {
+        const original = dayHabits.find((h) => h.id === d.id);
+        return (
+          original &&
+          (original.name !== d.name || original.value_huf !== d.value_huf) &&
+          d.name.trim() &&
+          d.value_huf > 0
+        );
+      });
+      if (changed.length > 0) {
         await Promise.all(changed.map((h) => updateHabit(h.id, { name: h.name, value_huf: h.value_huf })));
         setHabits((prev) =>
           prev.map((h) => {
@@ -2230,26 +2333,30 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
             return c ? { ...h, name: c.name, value_huf: c.value_huf } : h;
           })
         );
-      } catch (e) {
-        showToast(e.message, "error");
       }
+    } catch (e) {
+      showToast(e.message, "error");
     }
     setSaving(false);
-    onClose();
+    setDraftHabits([]);
+    setPendingDeletions([]);
+    setMode("view");
   };
 
   const pendingHabitName = (habit) => (habit.nameKey ? t(habit.nameKey) : habit.name);
+  const listToShow = mode === "edit" ? draftHabits : dayHabits;
 
   return (
     <ModalBase onClose={onClose}>
       <ModalHeader title={title} onClose={onClose} />
-      {draftHabits.length === 0 ? (
+
+      {listToShow.length === 0 ? (
         <p className="text-sm text-center py-6" style={{ color: C.mutedForeground }}>
           {t("calendar.noHabitsThisDay")}
         </p>
-      ) : (
+      ) : mode === "edit" ? (
         <div className="space-y-2 mb-4">
-          {draftHabits.map((h) => (
+          {listToShow.map((h) => (
             <ManageHabitRow
               key={h.id}
               habit={h}
@@ -2259,7 +2366,10 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
             />
           ))}
         </div>
+      ) : (
+        <HabitDayList dayHabits={listToShow} />
       )}
+
       <button
         onClick={() => setShowAddForDay(true)}
         className="w-full flex items-center justify-center gap-1.5 text-sm font-medium py-3 rounded-xl mb-3 hb-glass active:opacity-80"
@@ -2268,24 +2378,35 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
         <Plus size={14} />
         {t("calendar.addHabitForDay")}
       </button>
-      <div className="flex gap-2.5">
+
+      {mode === "view" ? (
         <button
-          onClick={onClose}
-          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          onClick={enterEditMode}
+          className="w-full h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
           style={{ color: C.foreground }}
         >
-          {t("modal.cancel")}
+          {t("modal.edit")}
         </button>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
-          style={{ color: C.foreground }}
-        >
-          {saving && <Loader2 size={14} className="animate-spin" />}
-          {t("modal.save")}
-        </button>
-      </div>
+      ) : (
+        <div className="flex gap-2.5">
+          <button
+            onClick={cancelEdit}
+            className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+            style={{ color: C.foreground }}
+          >
+            {t("modal.cancel")}
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+            style={{ color: C.foreground }}
+          >
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {t("modal.save")}
+          </button>
+        </div>
+      )}
 
       {showAddForDay && (
         <AddHabitForDayForm dateLabel={title} onClose={() => setShowAddForDay(false)} onConfirm={handleAddForDay} />
@@ -2294,15 +2415,15 @@ function DayEditorModal({ dateIso, habits, user, setHabits, setCheckins, showToa
         <ConfirmRecurringDeleteModal
           habitName={pendingHabitName(pendingRecurringDelete)}
           onClose={() => setPendingRecurringDelete(null)}
-          onDeleteThisDay={() => handleDeleteThisDayOnly(pendingRecurringDelete)}
-          onDeleteAll={() => handleDeleteEntireHabit(pendingRecurringDelete)}
+          onDeleteThisDay={() => queueDeletion(pendingRecurringDelete, "thisDayOnly")}
+          onDeleteAll={() => queueDeletion(pendingRecurringDelete, "entire")}
         />
       )}
       {pendingSimpleDelete && (
         <ConfirmDeleteHabitModal
           habitName={pendingHabitName(pendingSimpleDelete)}
           onClose={() => setPendingSimpleDelete(null)}
-          onConfirm={() => handleDeleteEntireHabit(pendingSimpleDelete)}
+          onConfirm={() => queueDeletion(pendingSimpleDelete, "entire")}
         />
       )}
     </ModalBase>
@@ -2413,7 +2534,7 @@ function MonthlyCalendarView({ habits, user, setHabits, setCheckins, showToast }
               onClick={() => setSelectedDay(iso)}
               className="w-full text-left rounded-lg p-1 min-h-[54px] flex flex-col items-start active:opacity-70"
               style={{
-                background: isToday ? "#F1F1EF" : "transparent",
+                background: isToday ? C.secondary : "transparent",
                 border: isToday ? `1px solid ${C.primary}55` : "1px solid transparent",
               }}
             >
@@ -2485,7 +2606,7 @@ function WeeklyCalendarView({ habits, user, setHabits, setCheckins, showToast })
               onClick={() => setSelectedDay(iso)}
               className="w-full rounded-lg p-1 min-h-[120px] flex flex-col items-center active:opacity-70"
               style={{
-                background: isToday ? "#F1F1EF" : "transparent",
+                background: isToday ? C.secondary : "transparent",
                 border: isToday ? `1px solid ${C.primary}55` : "1px solid transparent",
               }}
             >
@@ -2678,6 +2799,13 @@ function App() {
   const [toast, showToast] = useToast();
   const [lang, setLang] = useState("en");
   const t = makeT(lang);
+  const [theme, setTheme] = useState(() => localStorage.getItem("hb-theme") || "light");
+  C = theme === "dark" ? DARK_COLORS : LIGHT_COLORS;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", theme === "dark");
+    localStorage.setItem("hb-theme", theme);
+  }, [theme]);
 
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
@@ -2743,30 +2871,32 @@ function App() {
   }
 
   return (
-    <LangContext.Provider value={{ lang, setLang, t }}>
-      <style>{FONT_IMPORT}</style>
-      <AmbientBackground />
-      <Toast toast={toast} />
-      {route === "login" && <LoginPage goto={setRoute} showToast={showToast} />}
-      {route === "register" && <RegisterPage goto={setRoute} showToast={showToast} />}
-      {route === "forgot-password" && <ForgotPasswordPage goto={setRoute} showToast={showToast} />}
-      {route === "reset-password" && <ResetPasswordPage goto={setRoute} showToast={showToast} />}
-      {route === "app" && user && (
-        <AppLayout
-          user={user}
-          tab={tab}
-          setTab={setTab}
-          onLogout={handleLogout}
-          habits={habits}
-          setHabits={setHabits}
-          checkins={checkins}
-          setCheckins={setCheckins}
-          balance={balance}
-          setBalance={setBalance}
-          showToast={showToast}
-        />
-      )}
-    </LangContext.Provider>
+    <ThemeContext.Provider value={{ theme, setTheme }}>
+      <LangContext.Provider value={{ lang, setLang, t }}>
+        <style>{FONT_IMPORT}</style>
+        <AmbientBackground />
+        <Toast toast={toast} />
+        {route === "login" && <LoginPage goto={setRoute} showToast={showToast} />}
+        {route === "register" && <RegisterPage goto={setRoute} showToast={showToast} />}
+        {route === "forgot-password" && <ForgotPasswordPage goto={setRoute} showToast={showToast} />}
+        {route === "reset-password" && <ResetPasswordPage goto={setRoute} showToast={showToast} />}
+        {route === "app" && user && (
+          <AppLayout
+            user={user}
+            tab={tab}
+            setTab={setTab}
+            onLogout={handleLogout}
+            habits={habits}
+            setHabits={setHabits}
+            checkins={checkins}
+            setCheckins={setCheckins}
+            balance={balance}
+            setBalance={setBalance}
+            showToast={showToast}
+          />
+        )}
+      </LangContext.Provider>
+    </ThemeContext.Provider>
   );
 }
 

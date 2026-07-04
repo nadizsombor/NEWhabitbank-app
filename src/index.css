@@ -9,6 +9,11 @@ body {
   background: #fff;
 }
 
+html.dark,
+html.dark body {
+  background: #171717;
+}
+
 #root {
   min-height: 100vh;
 }
