@@ -46,6 +46,7 @@ import {
   addCustomHabit,
   addWeeklyHabit,
   setBalanceAmounts,
+  withdrawBalance,
   addCheckin,
   removeCheckin,
   updateHabit,
@@ -290,9 +291,12 @@ const TRANSLATIONS = {
   "modal.resetCalendarConfirm": { en: "Delete Everything", hu: "Minden törlése" },
   "toast.calendarReset": { en: "Calendar reset", hu: "Naptár visszaállítva" },
   "analytics.title": { en: "Analytics", hu: "Statisztika" },
-  "analytics.comingSoon": { en: "Analytics coming soon", hu: "A statisztika hamarosan érkezik" },
-  "analytics.subtitle": { en: "Your balance growth, day by day", hu: "Az egyenleged gyarapodása napról napra" },
-  "analytics.noData": { en: "No check-ins yet — complete a habit to see your chart", hu: "Még nincs bejelölés — teljesíts egy szokást, hogy lásd a diagramot" },
+  "analytics.subtitle": { en: "Saving progress across withdraw cycles", hu: "Megtakarítási előrehaladás withdraw ciklusonként" },
+  "analytics.totalSaved": { en: "Total saved on card", hu: "Kártyán lévő teljes megtakarítás" },
+  "analytics.cycleNow": { en: "Current cycle", hu: "Jelenlegi ciklus" },
+  "analytics.cyclePrev": { en: "Previous cycle", hu: "Előző ciklus" },
+  "analytics.cyclePrev2": { en: "2 cycles ago", hu: "2 ciklussal korábban" },
+  "analytics.day": { en: "Day", hu: "Nap" },
   "profile.email": { en: "Email", hu: "E-mail" },
   "profile.role": { en: "Role", hu: "Szerepkör" },
   "profile.roleUser": { en: "User", hu: "Felhasználó" },
@@ -1690,10 +1694,19 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
 
   const today = todayStr();
   const activeHabits = habitsForDate(habits, selectedDate);
-  const checkinsSelected = useMemo(
-    () => new Set(checkins.filter((c) => c.completed_date === selectedDate).map((c) => c.habit_id)),
+  const checkinsOnSelected = useMemo(
+    () => checkins.filter((c) => c.completed_date === selectedDate),
     [checkins, selectedDate]
   );
+  const checkinsSelected = useMemo(
+    () => new Set(checkinsOnSelected.map((c) => c.habit_id)),
+    [checkinsOnSelected]
+  );
+  const isWithdrawLocked = (habitId) => {
+    if (!balance.withdrawn_at) return false;
+    const c = checkinsOnSelected.find((c) => c.habit_id === habitId);
+    return !!c && !!c.created_at && c.created_at <= balance.withdrawn_at;
+  };
 
   const savedToday = useMemo(() => {
     const valueByHabit = new Map(habits.map((h) => [h.id, h.value_huf]));
@@ -1718,7 +1731,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     setShowTopUp(false);
     try {
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
-      setBalance(next);
+      setBalance((prev) => ({ ...prev, ...next }));
       showToast(`+${fmt(amount)} ${t("currency")} ${t("toast.topUpSuffix")}`);
     } catch (e) {
       showToast(e.message, "error");
@@ -1726,11 +1739,10 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   };
 
   const handleWithdraw = async () => {
-    const next = { locked_amount: balance.locked_amount, withdrawable_amount: 0 };
     setShowWithdraw(false);
     try {
-      await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
-      setBalance(next);
+      const withdrawn_at = await withdrawBalance(user.id, balance.locked_amount);
+      setBalance({ locked_amount: balance.locked_amount, withdrawable_amount: 0, withdrawn_at });
       showToast(t("toast.withdrawComplete"));
     } catch (e) {
       showToast(e.message, "error");
@@ -1742,7 +1754,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     setShowUnlock(false);
     try {
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
-      setBalance(next);
+      setBalance((prev) => ({ ...prev, ...next }));
       showToast(t("toast.withdrawComplete"));
     } catch (e) {
       showToast(e.message, "error");
@@ -1783,7 +1795,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     try {
       await removeCheckin(habit.id, selectedDate);
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
-      setBalance(next);
+      setBalance((prev) => ({ ...prev, ...next }));
       setCheckins((prev) => prev.filter((c) => !(c.habit_id === habit.id && c.completed_date === selectedDate)));
       showToast(`${fmt(habit.value_huf)} ${t("currency")} ${t("toast.movedBackSuffix")}`);
     } catch (e) {
@@ -1801,8 +1813,11 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     try {
       const checkin = await addCheckin(user.id, habit.id, selectedDate);
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
-      setBalance(next);
-      setCheckins((prev) => [...prev, { id: checkin.id, habit_id: habit.id, completed_date: selectedDate }]);
+      setBalance((prev) => ({ ...prev, ...next }));
+      setCheckins((prev) => [
+        ...prev,
+        { id: checkin.id, habit_id: habit.id, completed_date: selectedDate, created_at: checkin.created_at },
+      ]);
       showToast(`+${fmt(habit.value_huf)} ${t("currency")} ${t("toast.earnedSuffix")}`);
     } catch (e) {
       showToast(e.message, "error");
@@ -1815,7 +1830,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     const isPast = selectedDate < today;
 
     if (isChecked) {
-      if (isPast) return; // locked: past check-ins can't be modified
+      if (isPast || isWithdrawLocked(habit.id)) return; // locked: can't be modified
       setPendingUncheck(habit);
       return;
     }
@@ -1877,7 +1892,9 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
                 habit={h}
                 checked={checkinsSelected.has(h.id)}
                 disabled={!checkinsSelected.has(h.id) && balance.locked_amount < h.value_huf}
-                locked={selectedDate < today && checkinsSelected.has(h.id)}
+                locked={
+                  checkinsSelected.has(h.id) && (selectedDate < today || isWithdrawLocked(h.id))
+                }
                 loading={checkingId === h.id}
                 onToggle={handleToggle}
               />
@@ -1967,38 +1984,94 @@ function ChartTooltip({ active, payload, label, lang, t }) {
   );
 }
 
-function AnalyticsPage({ checkins, habits, withdrawable }) {
-  const { t, lang } = useLang();
+/* -------------------------------- Analytics page ------------------------------- */
 
-  const chartData = useMemo(() => {
-    const valueByHabit = new Map(habits.map((h) => [h.id, h.value_huf]));
-    const totalsByDate = {};
-    checkins.forEach((c) => {
-      const v = valueByHabit.get(c.habit_id) || 0;
-      totalsByDate[c.completed_date] = (totalsByDate[c.completed_date] || 0) + v;
+// Each entry is one withdraw cycle: `id` 0 = the active (in-progress) cycle,
+// 1 = the cycle before it, 2 = the one before that. `values[day]` is the
+// cumulative amount saved on that day of the cycle (day 0 = the day the
+// previous withdraw happened / the day the habit tracking started, so it
+// always begins at 0). Cycles naturally differ in length since a withdraw
+// can happen at any time.
+const MOCK_SAVINGS_CYCLES = [
+  { id: 2, values: [0, 600, 600, 1300, 1300, 1300, 2000, 2600] },
+  { id: 1, values: [0, 300, 900, 900, 1500, 2100, 2100, 2600, 3000, 3400, 3400] },
+  { id: 0, values: [0, 500, 500, 1200, 1200, 1900, 2400, 2400, 3100] },
+];
+
+function buildCycleChartRows(cycles) {
+  const maxLen = Math.max(...cycles.map((c) => c.values.length));
+  const rows = [];
+  for (let day = 0; day < maxLen; day++) {
+    const row = { day };
+    cycles.forEach((c) => {
+      row[`cycle${c.id}`] = day < c.values.length ? c.values[day] : null;
     });
+    rows.push(row);
+  }
+  return rows;
+}
 
-    const windowStart = daysAgoStr(13);
-    // Carry forward any earnings collected before the visible window so the
-    // line starts from the correct running total instead of resetting to 0.
-    let cumulative = 0;
-    Object.keys(totalsByDate).forEach((iso) => {
-      if (iso < windowStart) cumulative += totalsByDate[iso];
-    });
+function SavingsCycleTooltip({ active, payload, label, t }) {
+  if (!active || !payload || !payload.length) return null;
+  const visible = payload.filter((p) => p.value !== null && p.value !== undefined);
+  if (!visible.length) return null;
+  return (
+    <div className="px-3 py-2 rounded-xl pointer-events-none hb-glass" style={{ ...body }}>
+      <div className="text-[11px] mb-1" style={{ color: C.mutedForeground, ...mono }}>
+        {t("analytics.day")} {label}
+      </div>
+      {visible.map((p) => (
+        <div
+          key={p.dataKey}
+          className="flex items-center gap-1.5 text-sm font-semibold"
+          style={{ ...mono, color: C.foreground }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.stroke }} />
+          {fmt(p.value)}
+          <span className="text-[10px] font-sans" style={{ color: C.mutedForeground }}>
+            {t("currency")}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-    const days = [];
-    for (let i = 13; i >= 0; i--) {
-      const iso = daysAgoStr(i);
-      cumulative += totalsByDate[iso] || 0;
-      days.push({ date: iso, amount: cumulative });
-    }
-    return days;
-  }, [checkins, habits]);
+function AnalyticsPage() {
+  const { t } = useLang();
 
-  const maxAmount = chartData.reduce((max, d) => Math.max(max, d.amount), 0);
-  const yMax = Math.max(withdrawable, maxAmount) > 0 ? Math.max(withdrawable, maxAmount) : 100;
-  const yTicks = [0, Math.round(yMax * 0.25), Math.round(yMax * 0.5), Math.round(yMax * 0.75), yMax];
-  const hasData = chartData.some((d) => d.amount > 0);
+  // Never show more than 3 lines: the active cycle plus its 2 most recent
+  // predecessors. Real data may carry a longer history, so we always trim it.
+  const cycles = useMemo(
+    () => MOCK_SAVINGS_CYCLES.slice().sort((a, b) => a.id - b.id).slice(0, 3),
+    []
+  );
+  const activeId = Math.min(...cycles.map((c) => c.id));
+
+  const chartRows = useMemo(() => buildCycleChartRows(cycles), [cycles]);
+
+  const totalSaved = cycles.reduce((sum, c) => sum + c.values[c.values.length - 1], 0);
+
+  const shadeFor = (c) => {
+    if (c.id === activeId) return C.foreground;
+    const stepsBack = c.id - activeId;
+    return stepsBack === 1 ? C.mutedForeground : `${C.mutedForeground}66`;
+  };
+  const labelFor = (c) => {
+    const stepsBack = c.id - activeId;
+    if (stepsBack === 0) return t("analytics.cycleNow");
+    return stepsBack === 1 ? t("analytics.cyclePrev") : t("analytics.cyclePrev2");
+  };
+
+  const maxAmount = Math.max(
+    100,
+    ...chartRows.flatMap((row) => cycles.map((c) => row[`cycle${c.id}`] || 0))
+  );
+  const yTicks = [0, Math.round(maxAmount * 0.25), Math.round(maxAmount * 0.5), Math.round(maxAmount * 0.75), maxAmount];
+
+  // Render furthest-back cycle first so the active cycle's black line is
+  // drawn last and sits visually on top of the faded historical ones.
+  const renderOrder = cycles.slice().sort((a, b) => b.id - a.id);
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
@@ -2011,56 +2084,69 @@ function AnalyticsPage({ checkins, habits, withdrawable }) {
         </p>
       </div>
 
+      <div className="mb-4">
+        <span className="text-xs" style={{ color: C.mutedForeground }}>
+          {t("analytics.totalSaved")}
+        </span>
+        <div className="text-4xl font-bold mt-0.5" style={{ ...mono, color: C.foreground }}>
+          {fmt(totalSaved)}{" "}
+          <span className="text-base font-sans" style={{ color: C.mutedForeground }}>
+            {t("currency")}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 mb-3 px-1">
+        {cycles.map((c) => (
+          <div key={c.id} className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: shadeFor(c) }} />
+            <span className="text-[11px]" style={{ color: C.mutedForeground }}>
+              {labelFor(c)}
+            </span>
+          </div>
+        ))}
+      </div>
+
       <div className="rounded-2xl p-4 pr-3 pl-1 hb-glass">
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="hbFill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={C.primary} stopOpacity={0.35} />
-                <stop offset="95%" stopColor={C.primary} stopOpacity={0} />
-              </linearGradient>
-            </defs>
+        <ResponsiveContainer width="100%" height={240}>
+          <LineChart data={chartRows} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
             <XAxis
-              dataKey="date"
-              tickFormatter={(iso) => dayNum(iso)}
+              dataKey="day"
               tick={{ fontSize: 11, fill: C.mutedForeground, fontFamily: "'Roboto Mono', monospace" }}
               axisLine={{ stroke: C.border }}
               tickLine={false}
-              interval={1}
             />
             <YAxis
-              domain={[0, yMax]}
+              domain={[0, maxAmount]}
               ticks={yTicks}
               allowDecimals={false}
               tick={{ fontSize: 11, fill: C.mutedForeground, fontFamily: "'Roboto Mono', monospace" }}
               axisLine={false}
               tickLine={false}
-              width={58}
+              width={54}
               tickFormatter={(v) => fmt(v)}
             />
             <Tooltip
-              content={<ChartTooltip lang={lang} t={t} />}
+              content={<SavingsCycleTooltip t={t} />}
               cursor={{ stroke: C.mutedForeground, strokeWidth: 1, strokeDasharray: "4 4" }}
             />
-            <Area
-              type="monotone"
-              dataKey="amount"
-              stroke={C.primary}
-              strokeWidth={2.5}
-              fill="url(#hbFill)"
-              dot={{ r: 3, fill: C.primary, strokeWidth: 0 }}
-              activeDot={{ r: 5, fill: C.primary, stroke: C.background, strokeWidth: 2 }}
-            />
-          </AreaChart>
+            {renderOrder.map((c) => (
+              <Line
+                key={c.id}
+                type="monotone"
+                dataKey={`cycle${c.id}`}
+                stroke={shadeFor(c)}
+                strokeWidth={c.id === activeId ? 2.5 : 2}
+                dot={false}
+                activeDot={{ r: c.id === activeId ? 5 : 4, fill: shadeFor(c), stroke: C.background, strokeWidth: 2 }}
+                connectNulls={false}
+                isAnimationActive={false}
+              />
+            ))}
+          </LineChart>
         </ResponsiveContainer>
       </div>
-
-      {!hasData && (
-        <p className="text-xs text-center mt-4" style={{ color: C.mutedForeground }}>
-          {t("analytics.noData")}
-        </p>
-      )}
     </div>
   );
 }
@@ -2328,14 +2414,18 @@ function AddHabitForDayForm({ dateLabel, onClose, onConfirm }) {
   );
 }
 
-function DayEditorModal({ dateIso, habits, checkins, user, setHabits, setCheckins, showToast, onClose }) {
+function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, setCheckins, showToast, onClose }) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
   const dayHabits = useMemo(() => habitsForDate(habits, dateIso), [habits, dateIso]);
   const isPastDay = dateIso < todayIso;
-  const isHabitLocked = (habitId) =>
-    isPastDay && checkins.some((c) => c.habit_id === habitId && c.completed_date === dateIso);
+  const isHabitLocked = (habitId) => {
+    const c = checkins.find((c) => c.habit_id === habitId && c.completed_date === dateIso);
+    if (!c) return false;
+    if (isPastDay) return true;
+    return !!balance?.withdrawn_at && !!c.created_at && c.created_at <= balance.withdrawn_at;
+  };
 
   const [mode, setMode] = useState("view"); // view | edit
   const [draftHabits, setDraftHabits] = useState([]);
@@ -2568,7 +2658,7 @@ function ResetCalendarModal({ onClose, onConfirm }) {
   );
 }
 
-function MonthlyCalendarView({ habits, checkins, user, setHabits, setCheckins, showToast }) {
+function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
   const todayIso = todayStr();
   const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
@@ -2656,6 +2746,7 @@ function MonthlyCalendarView({ habits, checkins, user, setHabits, setCheckins, s
           dateIso={selectedDay}
           habits={habits}
           checkins={checkins}
+          balance={balance}
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
@@ -2667,7 +2758,7 @@ function MonthlyCalendarView({ habits, checkins, user, setHabits, setCheckins, s
   );
 }
 
-function WeeklyCalendarView({ habits, checkins, user, setHabits, setCheckins, showToast }) {
+function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
   const todayIso = todayStr();
   const [weekStart, setWeekStart] = useState(() => shiftDateStr(todayIso, -new Date(todayIso + "T00:00:00").getDay()));
@@ -2729,6 +2820,7 @@ function WeeklyCalendarView({ habits, checkins, user, setHabits, setCheckins, sh
           dateIso={selectedDay}
           habits={habits}
           checkins={checkins}
+          balance={balance}
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
@@ -2740,7 +2832,7 @@ function WeeklyCalendarView({ habits, checkins, user, setHabits, setCheckins, sh
   );
 }
 
-function DailyCalendarView({ habits, checkins, user, setHabits, setCheckins, showToast }) {
+function DailyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const [selectedDate, setSelectedDate] = useState(todayIso);
@@ -2780,6 +2872,7 @@ function DailyCalendarView({ habits, checkins, user, setHabits, setCheckins, sho
           dateIso={selectedDate}
           habits={habits}
           checkins={checkins}
+          balance={balance}
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
@@ -2791,7 +2884,7 @@ function DailyCalendarView({ habits, checkins, user, setHabits, setCheckins, sho
   );
 }
 
-function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, showToast }) {
+function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, balance, showToast }) {
   const { t } = useLang();
   const [view, setView] = useState("monthly");
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -2809,7 +2902,7 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, sho
     }
   };
 
-  const viewProps = { habits, checkins, user, setHabits, setCheckins, showToast };
+  const viewProps = { habits, checkins, balance, user, setHabits, setCheckins, showToast };
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
@@ -2878,6 +2971,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           setHabits={setHabits}
           checkins={checkins}
           setCheckins={setCheckins}
+          balance={balance}
           showToast={showToast}
         />
       )}
@@ -2907,7 +3001,7 @@ function App() {
 
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
-  const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0 });
+  const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
 
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {

@@ -18,8 +18,13 @@ create table if not exists public.profiles (
 create table if not exists public.balances (
   user_id uuid primary key references public.profiles(id) on delete cascade,
   locked_amount numeric not null default 12000,
-  withdrawable_amount numeric not null default 0
+  withdrawable_amount numeric not null default 0,
+  -- Set every time the user withdraws. Any check-in created at or before this
+  -- moment is permanently locked (can no longer be unchecked), even same-day.
+  withdrawn_at timestamptz
 );
+
+alter table public.balances add column if not exists withdrawn_at timestamptz;
 
 -- type: 'daily' (every day), 'custom' (explicit one-off dates, incl. a
 -- single-date "exact date" habit), 'weekly' (recurs on specific weekdays,

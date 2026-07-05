@@ -24,9 +24,15 @@ export async function loadUserData(userId) {
     balance: {
       locked_amount: balanceRow?.locked_amount ?? 0,
       withdrawable_amount: balanceRow?.withdrawable_amount ?? 0,
+      withdrawn_at: balanceRow?.withdrawn_at ?? null,
     },
     habits: (habitRows || []).map(fromDbHabit),
-    checkins: (checkinRows || []).map((c) => ({ id: c.id, habit_id: c.habit_id, completed_date: c.completed_date })),
+    checkins: (checkinRows || []).map((c) => ({
+      id: c.id,
+      habit_id: c.habit_id,
+      completed_date: c.completed_date,
+      created_at: c.created_at,
+    })),
   };
 }
 
@@ -66,6 +72,16 @@ export async function setBalanceAmounts(userId, locked_amount, withdrawable_amou
     .update({ locked_amount, withdrawable_amount })
     .eq("user_id", userId);
   if (error) throw error;
+}
+
+export async function withdrawBalance(userId, locked_amount) {
+  const withdrawn_at = new Date().toISOString();
+  const { error } = await supabase
+    .from("balances")
+    .update({ locked_amount, withdrawable_amount: 0, withdrawn_at })
+    .eq("user_id", userId);
+  if (error) throw error;
+  return withdrawn_at;
 }
 
 export async function addCheckin(userId, habitId, completedDate) {
