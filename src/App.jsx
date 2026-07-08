@@ -43,6 +43,7 @@ import {
 } from "recharts";
 
 import { supabase } from "./lib/supabaseClient";
+import { useAnalytics } from "./lib/analytics";
 import {
   loadUserData,
   addDailyHabit,
@@ -74,6 +75,21 @@ const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter
   }
   .dark .hb-glass:hover {
     background: #262626;
+  }
+  @keyframes hbFadeSlideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .hb-fade-slide-up {
+    opacity: 0;
+    animation: hbFadeSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: var(--hb-fade-delay, 0s);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hb-fade-slide-up {
+      animation: none;
+      opacity: 1;
+    }
   }
 `;
 
@@ -304,6 +320,11 @@ const TRANSLATIONS = {
   "analytics.youHaveCompleted": { en: "You have completed", hu: "Teljesítettél" },
   "analytics.inThisSession": { en: "in this session", hu: "ebben a munkamenetben" },
   "analytics.top3": { en: "Top 3", hu: "Top 3" },
+  "analytics.stillGathering": {
+    en: "Still gathering data — complete a few habits to see your stats here.",
+    hu: "Még gyűjtjük az adatokat — teljesíts néhány szokást, hogy itt láthasd a statisztikáidat.",
+  },
+  "analytics.noCompletionsYet": { en: "No completions yet", hu: "Még nincs teljesítés" },
   "profile.email": { en: "Email", hu: "E-mail" },
   "profile.role": { en: "Role", hu: "Szerepkör" },
   "profile.roleUser": { en: "User", hu: "Felhasználó" },
@@ -1989,6 +2010,25 @@ function DottedProgressRing({
   const resolvedDotColorActive = dotColorActive || C.foreground;
   const clampedProgress = Math.max(0, Math.min(100, progress));
 
+  // Animate the ring counting up from 0 to the actual percentage once, on
+  // mount / whenever the target changes, instead of just snapping to it.
+  const [displayProgress, setDisplayProgress] = useState(0);
+  useEffect(() => {
+    let frame;
+    const duration = 900;
+    const start = performance.now();
+    const from = 0;
+    const tick = (now) => {
+      const elapsed = now - start;
+      const t = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - t, 3); // ease-out-cubic
+      setDisplayProgress(from + (clampedProgress - from) * eased);
+      if (t < 1) frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [clampedProgress]);
+
   const dots = useMemo(() => {
     const center = size / 2;
     const outerR = size * 0.46;
@@ -2024,15 +2064,18 @@ function DottedProgressRing({
 
   // Progress arc starts at 12 o'clock and sweeps clockwise. SVG angle 0 is
   // 3 o'clock, so shift by -90deg to align the start with the top.
-  const progressAngleEnd = clampedProgress * 3.6;
+  const progressAngleEnd = displayProgress * 3.6;
   const isActive = (angle) => {
     const shifted = (angle + 90) % 360;
     return shifted <= progressAngleEnd;
   };
 
   return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="absolute inset-0">
+    <div
+      className="relative flex items-center justify-center"
+      style={{ width: size, height: size, maxWidth: "100%", aspectRatio: "1 / 1" }}
+    >
+      <svg viewBox={`0 0 ${size} ${size}`} className="absolute inset-0 w-full h-full">
         {dots.map((d, i) => {
           const active = isActive(d.angle);
           const r = (active ? 1.7 : 1.3) * d.sizeFactor;
@@ -2050,7 +2093,7 @@ function DottedProgressRing({
         })}
       </svg>
       <span className="text-4xl font-bold" style={{ ...mono, color: C.foreground }}>
-        {Math.round(clampedProgress)}%
+        {Math.round(displayProgress)}%
       </span>
     </div>
   );
@@ -2093,11 +2136,11 @@ function DailyTrendSparkline({ data, color }) {
   );
 }
 
-function AnalyticsStatCard({ dark, className = "", children }) {
+function AnalyticsStatCard({ dark, className = "", style, children }) {
   return (
     <div
       className={`rounded-2xl p-4 flex flex-col ${dark ? "" : "hb-glass"} ${className}`}
-      style={dark ? { background: C.primary, color: C.primaryForeground } : undefined}
+      style={{ ...(dark ? { background: C.primary, color: C.primaryForeground } : undefined), ...style }}
     >
       {children}
     </div>
@@ -2107,7 +2150,7 @@ function AnalyticsStatCard({ dark, className = "", children }) {
 function Top3DonutCard({ data }) {
   const { t } = useLang();
   return (
-    <div className="rounded-2xl p-4" style={{ border: `1px solid ${C.border}` }}>
+    <div className="rounded-2xl p-4 hb-glass">
       <span className="text-sm font-bold block mb-3" style={{ color: C.foreground, ...heading }}>
         {t("analytics.top3")}
       </span>
@@ -2163,20 +2206,32 @@ function AnalyticsPlaceholder({ label, className = "", style = {} }) {
   );
 }
 
-// Mock data for the in-progress Analytics build - to be replaced by
-// useAnalytics() once every section's UI is confirmed.
-const MOCK_DAILY_TREND = [200, 500, 350, 750, 700, 900, 950];
-const MOCK_TOTAL_SAVED = 1760;
-const MOCK_BEST_HABIT = { name: "Drinking 3L Water", amount: 180 };
-const MOCK_COMPLETED_COUNT = 15;
-const MOCK_TOP3 = [
-  { name: "Drinking 3L Water", value: 180, color: "#191919" },
-  { name: "Read 1 hour", value: 120, color: "#9A9A96" },
-  { name: "Meditate in the morning", value: 60, color: "#FFFFFF" },
-];
+// Fixed grayscale ramp for the Top 3 donut - darkest for the #1 earner,
+// lightest (white/outline) for #3, matching the app's black/white/gray rule.
+const TOP3_COLORS = ["#191919", "#9A9A96", "#FFFFFF"];
 
-function AnalyticsPage() {
+function AnalyticsPage({ habits, checkins }) {
   const { t } = useLang();
+  const analytics = useAnalytics(habits, checkins);
+
+  // habits/checkins are already loaded by the time AppLayout can render
+  // (the app shows a full-screen spinner until then), so there's no
+  // separate async fetch here - this only guards the defensive case where
+  // the props haven't arrived yet.
+  if (!habits || !checkins) {
+    return (
+      <div className="max-w-lg mx-auto px-4 pb-20 flex items-center justify-center" style={{ minHeight: "60vh" }}>
+        <Loader2 size={24} className="animate-spin" color={C.mutedForeground} />
+      </div>
+    );
+  }
+
+  const hasAnyHabits = habits.length > 0;
+  const top3 = analytics.top3Habits.map((entry, i) => ({
+    name: entry.name,
+    value: entry.totalSaved,
+    color: TOP3_COLORS[i] || TOP3_COLORS[TOP3_COLORS.length - 1],
+  }));
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
@@ -2193,59 +2248,97 @@ function AnalyticsPage() {
         {t("analytics.welcomeTitle")}
       </h1>
 
-      <div className="space-y-3">
-        <div className="rounded-2xl flex flex-col items-center justify-center gap-4 py-8">
-          <DottedProgressRing progress={36} />
-          <SavedAmountText savedAmount={500} targetAmount={180} />
+      {!hasAnyHabits ? (
+        <div className="rounded-2xl py-16 px-6 text-center" style={{ border: `1.5px dashed ${C.border}` }}>
+          <span className="text-sm" style={{ color: C.mutedForeground, ...body }}>
+            {t("analytics.stillGathering")}
+          </span>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <AnalyticsStatCard>
-            <span className="text-xs font-medium mb-1" style={{ color: C.mutedForeground }}>
-              {t("analytics.dailyMoving")}
-            </span>
-            <DailyTrendSparkline data={MOCK_DAILY_TREND} color={C.foreground} />
-          </AnalyticsStatCard>
+      ) : (
+        <div className="space-y-3">
+          <div
+            className="hb-fade-slide-up flex flex-col items-center justify-center gap-4 py-8"
+            style={{ "--hb-fade-delay": "0s" }}
+          >
+            <DottedProgressRing progress={analytics.completionPercentage} />
+            <SavedAmountText savedAmount={analytics.savedAmount} targetAmount={analytics.targetAmount} />
+          </div>
+          <div className="grid grid-cols-2 gap-3 min-w-0">
+            <AnalyticsStatCard className="hb-fade-slide-up min-w-0" style={{ "--hb-fade-delay": "0.08s" }}>
+              <span className="text-xs font-medium mb-1" style={{ color: C.mutedForeground }}>
+                {t("analytics.dailyMoving")}
+              </span>
+              <DailyTrendSparkline data={analytics.dailyTrend} color={C.foreground} />
+            </AnalyticsStatCard>
 
-          <AnalyticsStatCard dark>
-            <span className="text-xs" style={{ color: C.primaryForeground, opacity: 0.7 }}>
-              {t("analytics.youHaveSaved")}
-            </span>
-            <div className="mt-1">
-              <span className="text-2xl font-bold" style={{ ...mono, color: C.primaryForeground }}>
-                {formatUsd(MOCK_TOTAL_SAVED)}
+            <AnalyticsStatCard dark className="hb-fade-slide-up min-w-0" style={{ "--hb-fade-delay": "0.14s" }}>
+              <span className="text-xs" style={{ color: C.primaryForeground, opacity: 0.75 }}>
+                {t("analytics.youHaveSaved")}
+              </span>
+              <div className="mt-1">
+                <span className="text-2xl font-bold" style={{ ...mono, color: C.primaryForeground }}>
+                  {formatUsd(analytics.totalSavedAllTime)}
+                </span>
+              </div>
+              <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.75 }}>
+                {t("analytics.inTotal")}
+              </span>
+            </AnalyticsStatCard>
+
+            <AnalyticsStatCard dark className="hb-fade-slide-up min-w-0" style={{ "--hb-fade-delay": "0.2s" }}>
+              <span className="text-xs" style={{ color: C.primaryForeground, opacity: 0.75 }}>
+                {t("analytics.bestEarningHabit")}
+              </span>
+              {analytics.bestEarningHabit ? (
+                <>
+                  <span className="text-base font-bold mt-1 leading-snug truncate" style={{ color: C.primaryForeground }}>
+                    {analytics.bestEarningHabit.name}
+                  </span>
+                  <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.75 }}>
+                    {formatUsd(analytics.bestEarningHabit.totalSaved)} {t("analytics.saved")}
+                  </span>
+                </>
+              ) : (
+                <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.75 }}>
+                  {t("analytics.noCompletionsYet")}
+                </span>
+              )}
+            </AnalyticsStatCard>
+
+            <AnalyticsStatCard
+              className="hb-fade-slide-up min-w-0 items-center text-center justify-center"
+              style={{ "--hb-fade-delay": "0.26s" }}
+            >
+              <span className="text-xs" style={{ color: C.mutedForeground }}>
+                {t("analytics.youHaveCompleted")}
+              </span>
+              <span className="text-4xl font-bold my-1" style={{ ...mono, color: C.foreground }}>
+                {analytics.completedSessionCount}
+              </span>
+              <span className="text-xs" style={{ color: C.mutedForeground }}>
+                {t("analytics.inThisSession")}
+              </span>
+            </AnalyticsStatCard>
+          </div>
+          {top3.length > 0 ? (
+            <div className="hb-fade-slide-up" style={{ "--hb-fade-delay": "0.32s" }}>
+              <Top3DonutCard data={top3} />
+            </div>
+          ) : (
+            <div
+              className="hb-fade-slide-up rounded-2xl p-4 text-center hb-glass"
+              style={{ "--hb-fade-delay": "0.32s" }}
+            >
+              <span className="text-sm font-bold block mb-2" style={{ color: C.foreground, ...heading }}>
+                {t("analytics.top3")}
+              </span>
+              <span className="text-xs" style={{ color: C.mutedForeground, ...body }}>
+                {t("analytics.stillGathering")}
               </span>
             </div>
-            <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
-              {t("analytics.inTotal")}
-            </span>
-          </AnalyticsStatCard>
-
-          <AnalyticsStatCard dark>
-            <span className="text-xs" style={{ color: C.primaryForeground, opacity: 0.7 }}>
-              {t("analytics.bestEarningHabit")}
-            </span>
-            <span className="text-base font-bold mt-1 leading-snug" style={{ color: C.primaryForeground }}>
-              {MOCK_BEST_HABIT.name}
-            </span>
-            <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
-              {formatUsd(MOCK_BEST_HABIT.amount)} {t("analytics.saved")}
-            </span>
-          </AnalyticsStatCard>
-
-          <AnalyticsStatCard className="items-center text-center justify-center">
-            <span className="text-xs" style={{ color: C.mutedForeground }}>
-              {t("analytics.youHaveCompleted")}
-            </span>
-            <span className="text-4xl font-bold my-1" style={{ ...mono, color: C.foreground }}>
-              {MOCK_COMPLETED_COUNT}
-            </span>
-            <span className="text-xs" style={{ color: C.mutedForeground }}>
-              {t("analytics.inThisSession")}
-            </span>
-          </AnalyticsStatCard>
+          )}
         </div>
-        <Top3DonutCard data={MOCK_TOP3} />
-      </div>
+      )}
     </div>
   );
 }
@@ -3083,7 +3176,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           showToast={showToast}
         />
       )}
-      {tab === "analytics" && <AnalyticsPage />}
+      {tab === "analytics" && <AnalyticsPage habits={habits} checkins={checkins} />}
       {tab === "calendar" && (
         <HabitCalendarPage
           user={user}
@@ -3122,6 +3215,7 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
+
 
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
