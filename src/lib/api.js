@@ -3,7 +3,7 @@ import { supabase } from "./supabaseClient";
 const fromDbHabit = (h) => ({
   id: h.id,
   name: h.name,
-  value_huf: h.value_huf,
+  value_usd: h.value_usd,
   type: h.type,
   archived: h.archived,
   scheduledDates: h.scheduled_dates || [],
@@ -36,30 +36,30 @@ export async function loadUserData(userId) {
   };
 }
 
-export async function addDailyHabit(userId, name, value_huf) {
+export async function addDailyHabit(userId, name, value_usd) {
   const { data, error } = await supabase
     .from("habits")
-    .insert({ user_id: userId, name, value_huf, type: "daily" })
+    .insert({ user_id: userId, name, value_usd, type: "daily" })
     .select()
     .single();
   if (error) throw error;
   return fromDbHabit(data);
 }
 
-export async function addCustomHabit(userId, name, value_huf, scheduledDates) {
+export async function addCustomHabit(userId, name, value_usd, scheduledDates) {
   const { data, error } = await supabase
     .from("habits")
-    .insert({ user_id: userId, name, value_huf, type: "custom", scheduled_dates: scheduledDates })
+    .insert({ user_id: userId, name, value_usd, type: "custom", scheduled_dates: scheduledDates })
     .select()
     .single();
   if (error) throw error;
   return fromDbHabit(data);
 }
 
-export async function addWeeklyHabit(userId, name, value_huf, weekdays) {
+export async function addWeeklyHabit(userId, name, value_usd, weekdays) {
   const { data, error } = await supabase
     .from("habits")
-    .insert({ user_id: userId, name, value_huf, type: "weekly", weekdays })
+    .insert({ user_id: userId, name, value_usd, type: "weekly", weekdays })
     .select()
     .single();
   if (error) throw error;
@@ -103,8 +103,8 @@ export async function removeCheckin(habitId, completedDate) {
   if (error) throw error;
 }
 
-export async function updateHabit(habitId, { name, value_huf }) {
-  const { error } = await supabase.from("habits").update({ name, value_huf }).eq("id", habitId);
+export async function updateHabit(habitId, { name, value_usd }) {
+  const { error } = await supabase.from("habits").update({ name, value_usd }).eq("id", habitId);
   if (error) throw error;
 }
 

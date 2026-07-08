@@ -216,7 +216,6 @@ const TRANSLATIONS = {
   "modal.confirmUnlock": { en: "Unlock Funds", hu: "Egyenleg feloldása" },
   "home.addHabitsToday": { en: "Add Habits for Today", hu: "Adj hozzá szokásokat mára" },
   "home.addHabitsFor": { en: "Add Habits for", hu: "Adj hozzá szokásokat —" },
-  "currency": { en: "HUF", hu: "Ft" },
   "streak.suffix": { en: "days streak", hu: "napos sorozat" },
   "home.todaysHabits": { en: "Today's Habits", hu: "Mai szokások" },
   "home.habitsFor": { en: "Habits —", hu: "Szokások —" },
@@ -234,7 +233,7 @@ const TRANSLATIONS = {
   "modal.addHabitTitle": { en: "Add Habit", hu: "Szokás hozzáadása" },
   "modal.name": { en: "Name", hu: "Név" },
   "modal.namePlaceholder": { en: "e.g. Workout", hu: "pl. Edzés" },
-  "modal.valuePerCompletion": { en: "Value per completion (HUF)", hu: "Érték teljesítésenként (Ft)" },
+  "modal.valuePerCompletion": { en: "Value per completion (USD)", hu: "Érték teljesítésenként (USD)" },
   "modal.createHabit": { en: "Create Habit", hu: "Szokás létrehozása" },
   "habitType.chooseTitle": { en: "What kind of habit?", hu: "Milyen típusú szokást adsz hozzá?" },
   "habitType.daily": { en: "Daily Habit", hu: "Napi szokás" },
@@ -323,7 +322,7 @@ const makeT = (lang) => (key) => TRANSLATIONS[key] ? TRANSLATIONS[key][lang] : k
 const ThemeContext = React.createContext({ theme: "light", setTheme: () => {} });
 const useTheme = () => React.useContext(ThemeContext);
 
-const fmt = (n) => Math.round(n || 0).toLocaleString("hu-HU");
+const formatUsd = (n) => `$${(n || 0).toFixed(2)}`;
 const toLocalISODate = (d) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -859,10 +858,7 @@ function BalanceCard({ locked, withdrawable, onTopUp, onWithdraw, onUnlock }) {
         </span>
         <div className="mt-1.5">
           <span className="text-5xl font-bold" style={{ ...mono, color: C.foreground }}>
-            {fmt(withdrawable)}
-          </span>{" "}
-          <span className="text-base font-sans" style={{ color: C.mutedForeground }}>
-            {t("currency")}
+            {formatUsd(withdrawable)}
           </span>
         </div>
         <span className="text-sm mt-1" style={{ color: C.mutedForeground, ...body }}>
@@ -886,10 +882,7 @@ function BalanceCard({ locked, withdrawable, onTopUp, onWithdraw, onUnlock }) {
         </div>
         <div className="mb-3">
           <span className="text-3xl font-bold" style={{ ...mono, color: C.foreground }}>
-            {fmt(locked)}
-          </span>{" "}
-          <span className="text-sm font-sans" style={{ color: C.mutedForeground }}>
-            {t("currency")}
+            {formatUsd(locked)}
           </span>
         </div>
         <div className="h-1.5 rounded-full overflow-hidden mb-4" style={{ background: C.muted }}>
@@ -959,7 +952,7 @@ function HabitCheckItem({ habit, checked, disabled, locked, loading, onToggle })
         className="text-xs font-semibold px-3 py-1.5 rounded-full"
         style={{ ...mono, color: C.foreground, background: C.muted }}
       >
-        {fmt(habit.value_huf)} <span className="text-[10px] font-sans">{t("currency")}</span>
+        {formatUsd(habit.value_usd)}
       </span>
     </button>
   );
@@ -1133,7 +1126,7 @@ function TopUpModal({ onClose, onConfirm }) {
             className="hb-glass px-3 py-1.5 rounded-lg text-xs font-medium"
             style={{ background: "transparent", color: C.foreground, ...mono }}
           >
-            {fmt(c)}
+            {formatUsd(c)}
           </button>
         ))}
       </div>
@@ -1158,10 +1151,7 @@ function WithdrawModal({ withdrawable, onClose, onConfirm }) {
       </p>
       <div className="mb-5">
         <span className="text-3xl font-bold" style={{ ...mono, color: C.primary }}>
-          {fmt(withdrawable)}
-        </span>{" "}
-        <span className="text-sm font-sans" style={{ color: C.mutedForeground }}>
-          {t("currency")}
+          {formatUsd(withdrawable)}
         </span>
       </div>
       <button
@@ -1185,10 +1175,7 @@ function UnlockModal({ locked, onClose, onConfirm }) {
       </p>
       <div className="mb-3">
         <span className="text-3xl font-bold" style={{ ...mono, color: C.primary }}>
-          {fmt(locked)}
-        </span>{" "}
-        <span className="text-sm font-sans" style={{ color: C.mutedForeground }}>
-          {t("currency")}
+          {formatUsd(locked)}
         </span>
       </div>
       <p className="text-xs mb-5" style={{ color: C.mutedForeground }}>
@@ -1256,9 +1243,9 @@ function AddHabitForm({ onClose, onConfirm }) {
     if (!name.trim() || !(Number(value) > 0)) return;
     setError("");
     if (frequency === "daily") {
-      onConfirm({ type: "daily", name: name.trim(), value_huf: Number(value) });
+      onConfirm({ type: "daily", name: name.trim(), value_usd: Number(value) });
     } else if (frequency === "date") {
-      onConfirm({ type: "custom", name: name.trim(), value_huf: Number(value), scheduledDates: [exactDate] });
+      onConfirm({ type: "custom", name: name.trim(), value_usd: Number(value), scheduledDates: [exactDate] });
     } else {
       if (selectedWeekdays.size === 0) {
         setError(t("modal.noWeekdaysSelected"));
@@ -1267,7 +1254,7 @@ function AddHabitForm({ onClose, onConfirm }) {
       onConfirm({
         type: "weekly",
         name: name.trim(),
-        value_huf: Number(value),
+        value_usd: Number(value),
         weekdays: Array.from(selectedWeekdays),
       });
     }
@@ -1392,17 +1379,17 @@ function ManageHabitRow({ habit, onRename, onValueChange, onRequestDelete }) {
         className="flex-1 min-w-0 bg-transparent outline-none text-sm font-medium"
         style={{ color: C.foreground, ...body }}
       />
+      <span className="text-xs shrink-0" style={{ color: C.mutedForeground, ...mono }}>
+        $
+      </span>
       <input
         type="number"
         inputMode="numeric"
-        value={habit.value_huf}
+        value={habit.value_usd}
         onChange={(e) => onValueChange(habit.id, Number(e.target.value) || 0)}
         className="w-20 bg-transparent outline-none text-sm text-right rounded-lg px-2 py-1"
         style={{ color: C.foreground, background: C.muted, ...mono }}
       />
-      <span className="text-[10px] font-sans shrink-0" style={{ color: C.mutedForeground }}>
-        {t("currency")}
-      </span>
       <button
         onClick={() => onRequestDelete(habit)}
         className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
@@ -1429,10 +1416,7 @@ function LockedManageHabitRow({ habit }) {
         className="w-20 text-sm text-right rounded-lg px-2 py-1"
         style={{ color: C.foreground, background: C.muted, ...mono }}
       >
-        {habit.value_huf}
-      </span>
-      <span className="text-[10px] font-sans shrink-0" style={{ color: C.mutedForeground }}>
-        {t("currency")}
+        {formatUsd(habit.value_usd)}
       </span>
       <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0">
         <Lock size={14} color={C.mutedForeground} />
@@ -1482,8 +1466,8 @@ function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAd
   const handleRename = (id, name) => {
     setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, name } : h)));
   };
-  const handleValueChange = (id, value_huf) => {
-    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_huf } : h)));
+  const handleValueChange = (id, value_usd) => {
+    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_usd } : h)));
   };
 
   // Deletion is only queued here; nothing is persisted until Save.
@@ -1503,9 +1487,9 @@ function ManageHabitsModal({ habits, onClose, onSaveChanges, onDeleteHabit, onAd
       const original = habits.find((h) => h.id === d.id);
       return (
         original &&
-        (original.name !== d.name || original.value_huf !== d.value_huf) &&
+        (original.name !== d.name || original.value_usd !== d.value_usd) &&
         d.name.trim() &&
-        d.value_huf > 0
+        d.value_usd > 0
       );
     });
     if (changed.length > 0) await onSaveChanges(changed);
@@ -1581,7 +1565,7 @@ function DailySummaryRow({ savedAmount, onManage }) {
           {t("home.dailySavedLabel")}
         </span>
         <span className="text-base font-bold" style={{ ...mono, color: C.foreground }}>
-          {fmt(savedAmount)} <span className="text-xs font-sans" style={{ color: C.mutedForeground }}>{t("currency")}</span>
+          {formatUsd(savedAmount)}
         </span>
       </div>
       <button
@@ -1665,16 +1649,16 @@ function useAddHabitFlow(user, setHabits, showToast) {
   const { t } = useLang();
   const [showForm, setShowForm] = useState(false);
 
-  const handleCreateHabit = async ({ type, name, value_huf, scheduledDates, weekdays }) => {
+  const handleCreateHabit = async ({ type, name, value_usd, scheduledDates, weekdays }) => {
     setShowForm(false);
     try {
       let habit;
       if (type === "daily") {
-        habit = await addDailyHabit(user.id, name, value_huf);
+        habit = await addDailyHabit(user.id, name, value_usd);
       } else if (type === "custom") {
-        habit = await addCustomHabit(user.id, name, value_huf, scheduledDates);
+        habit = await addCustomHabit(user.id, name, value_usd, scheduledDates);
       } else {
-        habit = await addWeeklyHabit(user.id, name, value_huf, weekdays);
+        habit = await addWeeklyHabit(user.id, name, value_usd, weekdays);
       }
       setHabits((prev) => [...prev, habit]);
       showToast(t("toast.habitCreated"));
@@ -1717,7 +1701,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   };
 
   const savedToday = useMemo(() => {
-    const valueByHabit = new Map(habits.map((h) => [h.id, h.value_huf]));
+    const valueByHabit = new Map(habits.map((h) => [h.id, h.value_usd]));
     return checkins
       .filter((c) => c.completed_date === selectedDate)
       .reduce((sum, c) => sum + (valueByHabit.get(c.habit_id) || 0), 0);
@@ -1740,7 +1724,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     try {
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
       setBalance((prev) => ({ ...prev, ...next }));
-      showToast(`+${fmt(amount)} ${t("currency")} ${t("toast.topUpSuffix")}`);
+      showToast(`+${formatUsd(amount)} ${t("toast.topUpSuffix")}`);
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -1772,11 +1756,11 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   const handleSaveHabitChanges = async (changedHabits) => {
     if (changedHabits.length === 0) return;
     try {
-      await Promise.all(changedHabits.map((h) => updateHabit(h.id, { name: h.name, value_huf: h.value_huf })));
+      await Promise.all(changedHabits.map((h) => updateHabit(h.id, { name: h.name, value_usd: h.value_usd })));
       setHabits((prev) =>
         prev.map((h) => {
           const changed = changedHabits.find((c) => c.id === h.id);
-          return changed ? { ...h, name: changed.name, value_huf: changed.value_huf } : h;
+          return changed ? { ...h, name: changed.name, value_usd: changed.value_usd } : h;
         })
       );
     } catch (e) {
@@ -1797,15 +1781,15 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   const performUncheck = async (habit) => {
     setCheckingId(habit.id);
     const next = {
-      locked_amount: balance.locked_amount + habit.value_huf,
-      withdrawable_amount: Math.max(0, balance.withdrawable_amount - habit.value_huf),
+      locked_amount: balance.locked_amount + habit.value_usd,
+      withdrawable_amount: Math.max(0, balance.withdrawable_amount - habit.value_usd),
     };
     try {
       await removeCheckin(habit.id, selectedDate);
       await setBalanceAmounts(user.id, next.locked_amount, next.withdrawable_amount);
       setBalance((prev) => ({ ...prev, ...next }));
       setCheckins((prev) => prev.filter((c) => !(c.habit_id === habit.id && c.completed_date === selectedDate)));
-      showToast(`${fmt(habit.value_huf)} ${t("currency")} ${t("toast.movedBackSuffix")}`);
+      showToast(`${formatUsd(habit.value_usd)} ${t("toast.movedBackSuffix")}`);
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -1815,8 +1799,8 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   const performCheckin = async (habit) => {
     setCheckingId(habit.id);
     const next = {
-      locked_amount: balance.locked_amount - habit.value_huf,
-      withdrawable_amount: balance.withdrawable_amount + habit.value_huf,
+      locked_amount: balance.locked_amount - habit.value_usd,
+      withdrawable_amount: balance.withdrawable_amount + habit.value_usd,
     };
     try {
       const checkin = await addCheckin(user.id, habit.id, selectedDate);
@@ -1826,7 +1810,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
         ...prev,
         { id: checkin.id, habit_id: habit.id, completed_date: selectedDate, created_at: checkin.created_at },
       ]);
-      showToast(`+${fmt(habit.value_huf)} ${t("currency")} ${t("toast.earnedSuffix")}`);
+      showToast(`+${formatUsd(habit.value_usd)} ${t("toast.earnedSuffix")}`);
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -1843,7 +1827,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
       return;
     }
 
-    if (balance.locked_amount < habit.value_huf) {
+    if (balance.locked_amount < habit.value_usd) {
       showToast(t("toast.insufficientBalance"), "error");
       return;
     }
@@ -1899,7 +1883,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
                 key={h.id}
                 habit={h}
                 checked={checkinsSelected.has(h.id)}
-                disabled={!checkinsSelected.has(h.id) && balance.locked_amount < h.value_huf}
+                disabled={!checkinsSelected.has(h.id) && balance.locked_amount < h.value_usd}
                 locked={
                   checkinsSelected.has(h.id) && (selectedDate < today || isWithdrawLocked(h.id))
                 }
@@ -1983,7 +1967,7 @@ function ChartTooltip({ active, payload, label, lang, t }) {
       style={{ ...body }}
     >
       <div className="text-sm font-semibold" style={{ ...mono, color: C.foreground }}>
-        {fmt(amount)} <span className="text-xs font-sans" style={{ color: C.mutedForeground }}>{t("currency")}</span>
+        {formatUsd(amount)}
       </div>
       <div className="text-[11px] mt-0.5" style={{ color: C.mutedForeground }}>
         {formatShortDate(label, lang)}
@@ -2078,16 +2062,10 @@ function SavedAmountText({ savedAmount, targetAmount }) {
     <div className="text-center">
       <span style={{ ...mono }}>
         <span className="text-3xl font-bold" style={{ color: C.foreground }}>
-          {savedAmount.toFixed(2)}
+          {formatUsd(savedAmount)}
         </span>
         <span className="text-lg font-normal" style={{ color: C.mutedForeground }}>
-          /{targetAmount.toFixed(2)}
-        </span>{" "}
-        <span
-          className="text-xs font-semibold uppercase"
-          style={{ color: C.mutedForeground, letterSpacing: "0.05em" }}
-        >
-          {t("currency")}
+          /{formatUsd(targetAmount)}
         </span>
       </span>
       <p className="text-xs mt-1" style={{ color: C.mutedForeground, ...body }}>
@@ -2234,10 +2212,7 @@ function AnalyticsPage() {
             </span>
             <div className="mt-1">
               <span className="text-2xl font-bold" style={{ ...mono, color: C.primaryForeground }}>
-                {fmt(MOCK_TOTAL_SAVED)}
-              </span>
-              <span className="text-xs uppercase ml-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
-                {t("currency")}
+                {formatUsd(MOCK_TOTAL_SAVED)}
               </span>
             </div>
             <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
@@ -2253,7 +2228,7 @@ function AnalyticsPage() {
               {MOCK_BEST_HABIT.name}
             </span>
             <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
-              {fmt(MOCK_BEST_HABIT.amount)} {t("currency")} {t("analytics.saved")}
+              {formatUsd(MOCK_BEST_HABIT.amount)} {t("analytics.saved")}
             </span>
           </AnalyticsStatCard>
 
@@ -2447,7 +2422,7 @@ function HabitDayList({ dayHabits }) {
               {displayName}
             </span>
             <span className="text-xs font-semibold" style={{ ...mono, color: C.mutedForeground }}>
-              {fmt(h.value_huf)} {t("currency")}
+              {formatUsd(h.value_usd)}
             </span>
           </div>
         );
@@ -2578,8 +2553,8 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
   const handleRename = (id, name) => {
     setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, name } : h)));
   };
-  const handleValueChange = (id, value_huf) => {
-    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_huf } : h)));
+  const handleValueChange = (id, value_usd) => {
+    setDraftHabits((prev) => prev.map((h) => (h.id === id ? { ...h, value_usd } : h)));
   };
 
   const handleRequestDelete = (habit) => {
@@ -2598,10 +2573,10 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
     setPendingSimpleDelete(null);
   };
 
-  const handleAddForDay = async (name, value_huf) => {
+  const handleAddForDay = async (name, value_usd) => {
     setShowAddForDay(false);
     try {
-      const habit = await addCustomHabit(user.id, name, value_huf, [dateIso]);
+      const habit = await addCustomHabit(user.id, name, value_usd, [dateIso]);
       setHabits((prev) => [...prev, habit]);
       if (mode === "edit") setDraftHabits((prev) => [...prev, habit]);
       showToast(t("toast.habitCreated"));
@@ -2629,17 +2604,17 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
         const original = dayHabits.find((h) => h.id === d.id);
         return (
           original &&
-          (original.name !== d.name || original.value_huf !== d.value_huf) &&
+          (original.name !== d.name || original.value_usd !== d.value_usd) &&
           d.name.trim() &&
-          d.value_huf > 0
+          d.value_usd > 0
         );
       });
       if (changed.length > 0) {
-        await Promise.all(changed.map((h) => updateHabit(h.id, { name: h.name, value_huf: h.value_huf })));
+        await Promise.all(changed.map((h) => updateHabit(h.id, { name: h.name, value_usd: h.value_usd })));
         setHabits((prev) =>
           prev.map((h) => {
             const c = changed.find((x) => x.id === h.id);
-            return c ? { ...h, name: c.name, value_huf: c.value_huf } : h;
+            return c ? { ...h, name: c.name, value_usd: c.value_usd } : h;
           })
         );
       }

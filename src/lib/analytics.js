@@ -4,7 +4,7 @@ import { useMemo } from "react";
  * @typedef {Object} Habit
  * @property {string} id
  * @property {string} name
- * @property {number} value_huf
+ * @property {number} value_usd
  * @property {'daily'|'custom'|'weekly'} type
  * @property {boolean} archived
  * @property {string[]} [scheduledDates]  ISO dates, only for type "custom"
@@ -106,7 +106,7 @@ export function computeAnalytics(habits, checkins, options = {}) {
   const periodEnd = options.periodEnd || todayIso;
   const trendDays = options.trendDays ?? 7;
 
-  const valueByHabit = new Map(habits.map((h) => [h.id, h.value_huf]));
+  const valueByHabit = new Map(habits.map((h) => [h.id, h.value_usd]));
   const nameByHabit = new Map(habits.map((h) => [h.id, h.name]));
   const checkinKeySet = new Set(checkins.map((c) => `${c.habit_id}|${c.completed_date}`));
 
@@ -120,10 +120,10 @@ export function computeAnalytics(habits, checkins, options = {}) {
     for (const habit of habits) {
       if (!isHabitDueOn(habit, iso)) continue;
       scheduledSlots += 1;
-      targetAmount += habit.value_huf;
+      targetAmount += habit.value_usd;
       if (checkinKeySet.has(`${habit.id}|${iso}`)) {
         completedSlots += 1;
-        savedAmount += habit.value_huf;
+        savedAmount += habit.value_usd;
       }
     }
   }

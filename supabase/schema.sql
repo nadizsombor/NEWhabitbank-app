@@ -26,6 +26,18 @@ create table if not exists public.balances (
 
 alter table public.balances add column if not exists withdrawn_at timestamptz;
 
+-- Habit values moved from HUF to USD; run once against an existing database
+-- that still has the old column (no-op / errors harmlessly if already renamed).
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'habits' and column_name = 'value_huf'
+  ) then
+    alter table public.habits rename column value_huf to value_usd;
+  end if;
+end $$;
+
 -- type: 'daily' (every day), 'custom' (explicit one-off dates, incl. a
 -- single-date "exact date" habit), 'weekly' (recurs on specific weekdays,
 -- 0=Sunday..6=Saturday, stored in the weekdays column).
@@ -35,7 +47,7 @@ create table if not exists public.habits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
   name text not null,
-  value_huf numeric not null,
+  value_usd numeric not null,
   type text not null default 'daily' check (type in ('daily', 'custom', 'weekly')),
   scheduled_dates date[] not null default '{}',
   weekdays integer[] not null default '{}',

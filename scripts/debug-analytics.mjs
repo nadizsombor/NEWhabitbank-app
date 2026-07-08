@@ -30,12 +30,12 @@ const shiftDateStr = (iso, delta) => {
 
 function loadMockData() {
   const habits = [
-    { id: "h1", name: "Workout", value_huf: 500, type: "daily", archived: false, excludedDates: [] },
-    { id: "h2", name: "Read", value_huf: 300, type: "daily", archived: false, excludedDates: [] },
+    { id: "h1", name: "Workout", value_usd: 500, type: "daily", archived: false, excludedDates: [] },
+    { id: "h2", name: "Read", value_usd: 300, type: "daily", archived: false, excludedDates: [] },
     {
       id: "h3",
       name: "Meal prep",
-      value_huf: 800,
+      value_usd: 800,
       type: "weekly",
       weekdays: [0, 3], // Sunday + Wednesday
       archived: false,

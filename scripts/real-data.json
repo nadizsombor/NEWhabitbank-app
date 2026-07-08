@@ -3,7 +3,7 @@
     {
       "id": "94280edd-7942-48a1-b7a0-82f848ae2ce4",
       "name": "Jiu Jitsu",
-      "value_huf": 650,
+      "value_usd": 650,
       "type": "weekly",
       "archived": false,
       "scheduledDates": [],
@@ -15,7 +15,7 @@
     {
       "id": "df66d7ff-6d1c-4752-8f89-c1cb9c03d7d4",
       "name": "Hang Out",
-      "value_huf": 650,
+      "value_usd": 650,
       "type": "weekly",
       "archived": false,
       "scheduledDates": [],
@@ -27,7 +27,7 @@
     {
       "id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
       "name": "Drink",
-      "value_huf": 350,
+      "value_usd": 350,
       "type": "daily",
       "archived": false,
       "scheduledDates": [],
@@ -37,7 +37,7 @@
     {
       "id": "09a395f8-1985-497f-b8f9-2325fad8de4f",
       "name": "eat",
-      "value_huf": 400,
+      "value_usd": 400,
       "type": "daily",
       "archived": false,
       "scheduledDates": [],
@@ -47,7 +47,7 @@
     {
       "id": "b90b5f6e-0b72-4478-b66d-af27805ae4f5",
       "name": "proba",
-      "value_huf": 300,
+      "value_usd": 300,
       "type": "custom",
       "archived": false,
       "scheduledDates": [
@@ -57,78 +57,5 @@
       "excludedDates": []
     }
   ],
-  "checkins": [
-    {
-      "id": "53618264-39e7-4a35-98af-41e0fa497a3c",
-      "habit_id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
-      "completed_date": "2026-07-05",
-      "created_at": "2026-07-05T23:04:51.081327+00:00"
-    },
-    {
-      "id": "49ccc866-36a3-4d6f-aa15-0693cb245857",
-      "habit_id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
-      "completed_date": "2026-07-04",
-      "created_at": "2026-07-05T23:04:57.249659+00:00"
-    },
-    {
-      "id": "bcd56789-2774-49bc-a8e6-5f028c0f9767",
-      "habit_id": "df66d7ff-6d1c-4752-8f89-c1cb9c03d7d4",
-      "completed_date": "2026-07-03",
-      "created_at": "2026-07-05T23:05:00.044939+00:00"
-    },
-    {
-      "id": "48bcc706-7886-4645-9559-e677490ac1ad",
-      "habit_id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
-      "completed_date": "2026-07-03",
-      "created_at": "2026-07-05T23:05:01.458812+00:00"
-    },
-    {
-      "id": "bc671e01-3006-4921-ae84-a60f22359233",
-      "habit_id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
-      "completed_date": "2026-07-02",
-      "created_at": "2026-07-05T23:05:04.106032+00:00"
-    },
-    {
-      "id": "25e63018-771c-4532-99f2-53936aec5edb",
-      "habit_id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
-      "completed_date": "2026-07-07",
-      "created_at": "2026-07-07T14:18:39.872951+00:00"
-    },
-    {
-      "id": "6fe9bb5a-d3bc-45e5-b385-63d785737dab",
-      "habit_id": "119dfe63-cf7b-4f3a-b6bb-e618b452fd00",
-      "completed_date": "2026-07-06",
-      "created_at": "2026-07-07T14:18:56.680174+00:00"
-    },
-    {
-      "id": "bf2634c2-b551-478e-a446-880e46929869",
-      "habit_id": "09a395f8-1985-497f-b8f9-2325fad8de4f",
-      "completed_date": "2026-07-06",
-      "created_at": "2026-07-07T14:18:58.322922+00:00"
-    },
-    {
-      "id": "0f53c9da-3a99-4185-8f8f-2c1118f9ed38",
-      "habit_id": "09a395f8-1985-497f-b8f9-2325fad8de4f",
-      "completed_date": "2026-07-05",
-      "created_at": "2026-07-07T14:19:02.41392+00:00"
-    },
-    {
-      "id": "f4c68a0b-be02-46aa-acb0-9d4b18970870",
-      "habit_id": "09a395f8-1985-497f-b8f9-2325fad8de4f",
-      "completed_date": "2026-07-04",
-      "created_at": "2026-07-07T14:19:05.74092+00:00"
-    },
-    {
-      "id": "da349ac4-8db6-4e97-b6b2-97a468cfcd1a",
-      "habit_id": "09a395f8-1985-497f-b8f9-2325fad8de4f",
-      "completed_date": "2026-07-07",
-      "created_at": "2026-07-07T14:19:15.05343+00:00"
-    },
-    {
-      "id": "4d2150bb-7e13-4960-a160-287158f1924d",
-      "habit_id": "b90b5f6e-0b72-4478-b66d-af27805ae4f5",
-      "completed_date": "2026-07-07",
-      "created_at": "2026-07-07T14:22:29.346771+00:00"
-    }
-  ]
+  "checkins": []
 }
