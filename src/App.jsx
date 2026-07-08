@@ -37,6 +37,9 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
 import { supabase } from "./lib/supabaseClient";
@@ -291,12 +294,16 @@ const TRANSLATIONS = {
   "modal.resetCalendarConfirm": { en: "Delete Everything", hu: "Minden törlése" },
   "toast.calendarReset": { en: "Calendar reset", hu: "Naptár visszaállítva" },
   "analytics.title": { en: "Analytics", hu: "Statisztika" },
-  "analytics.subtitle": { en: "Saving progress across withdraw cycles", hu: "Megtakarítási előrehaladás withdraw ciklusonként" },
-  "analytics.totalSaved": { en: "Total saved on card", hu: "Kártyán lévő teljes megtakarítás" },
-  "analytics.cycleNow": { en: "Current cycle", hu: "Jelenlegi ciklus" },
-  "analytics.cyclePrev": { en: "Previous cycle", hu: "Előző ciklus" },
-  "analytics.cyclePrev2": { en: "2 cycles ago", hu: "2 ciklussal korábban" },
-  "analytics.day": { en: "Day", hu: "Nap" },
+  "analytics.welcomeTitle": { en: "Welcome to the Analytic Center", hu: "Üdvözlünk az Elemzőközpontban" },
+  "analytics.isSaved": { en: "is saved", hu: "van megspórolva" },
+  "analytics.dailyMoving": { en: "Daily moving:", hu: "Napi mozgás:" },
+  "analytics.youHaveSaved": { en: "You have saved:", hu: "Megtakarítottál:" },
+  "analytics.inTotal": { en: "in total", hu: "összesen" },
+  "analytics.bestEarningHabit": { en: "Your best earning habit:", hu: "A legjobban kereső szokásod:" },
+  "analytics.saved": { en: "saved", hu: "megspórolva" },
+  "analytics.youHaveCompleted": { en: "You have completed", hu: "Teljesítettél" },
+  "analytics.inThisSession": { en: "in this session", hu: "ebben a munkamenetben" },
+  "analytics.top3": { en: "Top 3", hu: "Top 3" },
   "profile.email": { en: "Email", hu: "E-mail" },
   "profile.role": { en: "Role", hu: "Szerepkör" },
   "profile.roleUser": { en: "User", hu: "Felhasználó" },
@@ -1986,166 +1993,282 @@ function ChartTooltip({ active, payload, label, lang, t }) {
 
 /* -------------------------------- Analytics page ------------------------------- */
 
-// Each entry is one withdraw cycle: `id` 0 = the active (in-progress) cycle,
-// 1 = the cycle before it, 2 = the one before that. `values[day]` is the
-// cumulative amount saved on that day of the cycle (day 0 = the day the
-// previous withdraw happened / the day the habit tracking started, so it
-// always begins at 0). Cycles naturally differ in length since a withdraw
-// can happen at any time.
-const MOCK_SAVINGS_CYCLES = [
-  { id: 2, values: [0, 600, 600, 1300, 1300, 1300, 2000, 2600] },
-  { id: 1, values: [0, 300, 900, 900, 1500, 2100, 2100, 2600, 3000, 3400, 3400] },
-  { id: 0, values: [0, 500, 500, 1200, 1200, 1900, 2400, 2400, 3100] },
-];
+function DottedProgressRing({
+  size = 260,
+  progress = 0,
+  dotColor,
+  dotColorActive,
+  dotCount = 280,
+}) {
+  const resolvedDotColor = dotColor || C.mutedForeground;
+  const resolvedDotColorActive = dotColorActive || C.foreground;
+  const clampedProgress = Math.max(0, Math.min(100, progress));
 
-function buildCycleChartRows(cycles) {
-  const maxLen = Math.max(...cycles.map((c) => c.values.length));
-  const rows = [];
-  for (let day = 0; day < maxLen; day++) {
-    const row = { day };
-    cycles.forEach((c) => {
-      row[`cycle${c.id}`] = day < c.values.length ? c.values[day] : null;
-    });
-    rows.push(row);
-  }
-  return rows;
-}
+  const dots = useMemo(() => {
+    const center = size / 2;
+    const outerR = size * 0.46;
+    const innerR = size * 0.32;
+    const numRings = 14;
+    const dotsPerRing = Math.round(dotCount / numRings);
+    const list = [];
 
-function SavingsCycleTooltip({ active, payload, label, t }) {
-  if (!active || !payload || !payload.length) return null;
-  const visible = payload.filter((p) => p.value !== null && p.value !== undefined);
-  if (!visible.length) return null;
+    for (let ring = 0; ring < numRings; ring++) {
+      const t = ring / (numRings - 1); // 0..1 across the band's thickness
+      const radius = innerR + t * (outerR - innerR);
+      // Bell-curve taper on dot size only, so the band's inner/outer edges
+      // read softer while every dot still sits on an exact grid position.
+      const sizeFactor = 0.6 + 0.4 * Math.sin(Math.PI * t);
+
+      // Rotate each successive ring by a golden-ratio fraction of a step.
+      // This is still an exact, deterministic formula, but the irrational
+      // increment never repeats across rings, so dots never line up into
+      // radial spokes the way a fixed half-step offset would.
+      const stepAngle = 360 / dotsPerRing;
+      const ringOffset = ring * stepAngle * 0.6180339887;
+
+      for (let i = 0; i < dotsPerRing; i++) {
+        const angle = (i / dotsPerRing) * 360 + ringOffset;
+        const angleRad = (angle * Math.PI) / 180;
+        const x = center + radius * Math.cos(angleRad);
+        const y = center + radius * Math.sin(angleRad);
+        list.push({ angle, x, y, sizeFactor });
+      }
+    }
+    return list;
+  }, [size, dotCount]);
+
+  // Progress arc starts at 12 o'clock and sweeps clockwise. SVG angle 0 is
+  // 3 o'clock, so shift by -90deg to align the start with the top.
+  const progressAngleEnd = clampedProgress * 3.6;
+  const isActive = (angle) => {
+    const shifted = (angle + 90) % 360;
+    return shifted <= progressAngleEnd;
+  };
+
   return (
-    <div className="px-3 py-2 rounded-xl pointer-events-none hb-glass" style={{ ...body }}>
-      <div className="text-[11px] mb-1" style={{ color: C.mutedForeground, ...mono }}>
-        {t("analytics.day")} {label}
-      </div>
-      {visible.map((p) => (
-        <div
-          key={p.dataKey}
-          className="flex items-center gap-1.5 text-sm font-semibold"
-          style={{ ...mono, color: C.foreground }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: p.stroke }} />
-          {fmt(p.value)}
-          <span className="text-[10px] font-sans" style={{ color: C.mutedForeground }}>
-            {t("currency")}
-          </span>
-        </div>
-      ))}
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="absolute inset-0">
+        {dots.map((d, i) => {
+          const active = isActive(d.angle);
+          const r = (active ? 1.7 : 1.3) * d.sizeFactor;
+          const opacity = active ? 0.9 : 0.3;
+          return (
+            <circle
+              key={i}
+              cx={d.x}
+              cy={d.y}
+              r={r}
+              fill={active ? resolvedDotColorActive : resolvedDotColor}
+              opacity={opacity}
+            />
+          );
+        })}
+      </svg>
+      <span className="text-4xl font-bold" style={{ ...mono, color: C.foreground }}>
+        {Math.round(clampedProgress)}%
+      </span>
     </div>
   );
 }
 
+function SavedAmountText({ savedAmount, targetAmount }) {
+  const { t } = useLang();
+  return (
+    <div className="text-center">
+      <span style={{ ...mono }}>
+        <span className="text-3xl font-bold" style={{ color: C.foreground }}>
+          {savedAmount.toFixed(2)}
+        </span>
+        <span className="text-lg font-normal" style={{ color: C.mutedForeground }}>
+          /{targetAmount.toFixed(2)}
+        </span>{" "}
+        <span
+          className="text-xs font-semibold uppercase"
+          style={{ color: C.mutedForeground, letterSpacing: "0.05em" }}
+        >
+          {t("currency")}
+        </span>
+      </span>
+      <p className="text-xs mt-1" style={{ color: C.mutedForeground, ...body }}>
+        {t("analytics.isSaved")}
+      </p>
+    </div>
+  );
+}
+
+function DailyTrendSparkline({ data, color }) {
+  const chartData = data.map((v, i) => ({ i, v }));
+  return (
+    <ResponsiveContainer width="100%" height={56}>
+      <LineChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+        <Line
+          type="monotone"
+          dataKey="v"
+          stroke={color}
+          strokeWidth={2}
+          dot={{ r: 2.5, fill: color, strokeWidth: 0 }}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function AnalyticsStatCard({ dark, className = "", children }) {
+  return (
+    <div
+      className={`rounded-2xl p-4 flex flex-col ${dark ? "" : "hb-glass"} ${className}`}
+      style={dark ? { background: C.primary, color: C.primaryForeground } : undefined}
+    >
+      {children}
+    </div>
+  );
+}
+
+function Top3DonutCard({ data }) {
+  const { t } = useLang();
+  return (
+    <div className="rounded-2xl p-4" style={{ border: `1px solid ${C.border}` }}>
+      <span className="text-sm font-bold block mb-3" style={{ color: C.foreground, ...heading }}>
+        {t("analytics.top3")}
+      </span>
+      <div className="flex items-center gap-5">
+        <div className="shrink-0" style={{ width: 110, height: 110 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={data}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={28}
+                outerRadius={50}
+                startAngle={90}
+                endAngle={-270}
+                isAnimationActive={false}
+              >
+                {data.map((d, i) => (
+                  <Cell key={i} fill={d.color} stroke={C.border} strokeWidth={1} />
+                ))}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="flex-1 space-y-2.5">
+          {data.map((d, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span
+                className="w-3 h-3 rounded-sm shrink-0"
+                style={{ background: d.color, border: `1px solid ${C.border}` }}
+              />
+              <span className="text-xs" style={{ color: C.foreground, ...body }}>
+                {d.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalyticsPlaceholder({ label, className = "", style = {} }) {
+  return (
+    <div
+      className={`rounded-2xl flex items-center justify-center px-4 py-8 text-center ${className}`}
+      style={{ border: `1.5px dashed ${C.border}`, ...style }}
+    >
+      <span className="text-xs font-medium" style={{ color: C.mutedForeground, ...body }}>
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// Mock data for the in-progress Analytics build - to be replaced by
+// useAnalytics() once every section's UI is confirmed.
+const MOCK_DAILY_TREND = [200, 500, 350, 750, 700, 900, 950];
+const MOCK_TOTAL_SAVED = 1760;
+const MOCK_BEST_HABIT = { name: "Drinking 3L Water", amount: 180 };
+const MOCK_COMPLETED_COUNT = 15;
+const MOCK_TOP3 = [
+  { name: "Drinking 3L Water", value: 180, color: "#191919" },
+  { name: "Read 1 hour", value: 120, color: "#9A9A96" },
+  { name: "Meditate in the morning", value: 60, color: "#FFFFFF" },
+];
+
 function AnalyticsPage() {
   const { t } = useLang();
 
-  // Never show more than 3 lines: the active cycle plus its 2 most recent
-  // predecessors. Real data may carry a longer history, so we always trim it.
-  const cycles = useMemo(
-    () => MOCK_SAVINGS_CYCLES.slice().sort((a, b) => a.id - b.id).slice(0, 3),
-    []
-  );
-  const activeId = Math.min(...cycles.map((c) => c.id));
-
-  const chartRows = useMemo(() => buildCycleChartRows(cycles), [cycles]);
-
-  const totalSaved = cycles.reduce((sum, c) => sum + c.values[c.values.length - 1], 0);
-
-  const shadeFor = (c) => {
-    if (c.id === activeId) return C.foreground;
-    const stepsBack = c.id - activeId;
-    return stepsBack === 1 ? C.mutedForeground : `${C.mutedForeground}66`;
-  };
-  const labelFor = (c) => {
-    const stepsBack = c.id - activeId;
-    if (stepsBack === 0) return t("analytics.cycleNow");
-    return stepsBack === 1 ? t("analytics.cyclePrev") : t("analytics.cyclePrev2");
-  };
-
-  const maxAmount = Math.max(
-    100,
-    ...chartRows.flatMap((row) => cycles.map((c) => row[`cycle${c.id}`] || 0))
-  );
-  const yTicks = [0, Math.round(maxAmount * 0.25), Math.round(maxAmount * 0.5), Math.round(maxAmount * 0.75), maxAmount];
-
-  // Render furthest-back cycle first so the active cycle's black line is
-  // drawn last and sits visually on top of the faded historical ones.
-  const renderOrder = cycles.slice().sort((a, b) => b.id - a.id);
-
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <div className="py-4">
-        <span className="text-xl tracking-wide" style={heading}>
-          {t("analytics.title")}
-        </span>
-        <p className="text-xs mt-0.5" style={{ color: C.mutedForeground }}>
-          {t("analytics.subtitle")}
-        </p>
-      </div>
-
-      <div className="mb-4">
-        <span className="text-xs" style={{ color: C.mutedForeground }}>
-          {t("analytics.totalSaved")}
-        </span>
-        <div className="text-4xl font-bold mt-0.5" style={{ ...mono, color: C.foreground }}>
-          {fmt(totalSaved)}{" "}
-          <span className="text-base font-sans" style={{ color: C.mutedForeground }}>
-            {t("currency")}
-          </span>
+      <div className="flex items-center gap-2.5 py-4">
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center hb-glass">
+          <Landmark size={16} color={C.primary} />
         </div>
+        <span className="text-lg tracking-wide" style={heading}>
+          HabitBank
+        </span>
       </div>
 
-      <div className="flex items-center gap-4 mb-3 px-1">
-        {cycles.map((c) => (
-          <div key={c.id} className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: shadeFor(c) }} />
-            <span className="text-[11px]" style={{ color: C.mutedForeground }}>
-              {labelFor(c)}
+      <h1 className="text-xl tracking-wide mb-6" style={heading}>
+        {t("analytics.welcomeTitle")}
+      </h1>
+
+      <div className="space-y-3">
+        <div className="rounded-2xl flex flex-col items-center justify-center gap-4 py-8">
+          <DottedProgressRing progress={36} />
+          <SavedAmountText savedAmount={500} targetAmount={180} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <AnalyticsStatCard>
+            <span className="text-xs font-medium mb-1" style={{ color: C.mutedForeground }}>
+              {t("analytics.dailyMoving")}
             </span>
-          </div>
-        ))}
-      </div>
+            <DailyTrendSparkline data={MOCK_DAILY_TREND} color={C.foreground} />
+          </AnalyticsStatCard>
 
-      <div className="rounded-2xl p-4 pr-3 pl-1 hb-glass">
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={chartRows} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={C.border} vertical={false} />
-            <XAxis
-              dataKey="day"
-              tick={{ fontSize: 11, fill: C.mutedForeground, fontFamily: "'Roboto Mono', monospace" }}
-              axisLine={{ stroke: C.border }}
-              tickLine={false}
-            />
-            <YAxis
-              domain={[0, maxAmount]}
-              ticks={yTicks}
-              allowDecimals={false}
-              tick={{ fontSize: 11, fill: C.mutedForeground, fontFamily: "'Roboto Mono', monospace" }}
-              axisLine={false}
-              tickLine={false}
-              width={54}
-              tickFormatter={(v) => fmt(v)}
-            />
-            <Tooltip
-              content={<SavingsCycleTooltip t={t} />}
-              cursor={{ stroke: C.mutedForeground, strokeWidth: 1, strokeDasharray: "4 4" }}
-            />
-            {renderOrder.map((c) => (
-              <Line
-                key={c.id}
-                type="monotone"
-                dataKey={`cycle${c.id}`}
-                stroke={shadeFor(c)}
-                strokeWidth={c.id === activeId ? 2.5 : 2}
-                dot={false}
-                activeDot={{ r: c.id === activeId ? 5 : 4, fill: shadeFor(c), stroke: C.background, strokeWidth: 2 }}
-                connectNulls={false}
-                isAnimationActive={false}
-              />
-            ))}
-          </LineChart>
-        </ResponsiveContainer>
+          <AnalyticsStatCard dark>
+            <span className="text-xs" style={{ color: C.primaryForeground, opacity: 0.7 }}>
+              {t("analytics.youHaveSaved")}
+            </span>
+            <div className="mt-1">
+              <span className="text-2xl font-bold" style={{ ...mono, color: C.primaryForeground }}>
+                {fmt(MOCK_TOTAL_SAVED)}
+              </span>
+              <span className="text-xs uppercase ml-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
+                {t("currency")}
+              </span>
+            </div>
+            <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
+              {t("analytics.inTotal")}
+            </span>
+          </AnalyticsStatCard>
+
+          <AnalyticsStatCard dark>
+            <span className="text-xs" style={{ color: C.primaryForeground, opacity: 0.7 }}>
+              {t("analytics.bestEarningHabit")}
+            </span>
+            <span className="text-base font-bold mt-1 leading-snug" style={{ color: C.primaryForeground }}>
+              {MOCK_BEST_HABIT.name}
+            </span>
+            <span className="text-xs mt-1" style={{ color: C.primaryForeground, opacity: 0.7 }}>
+              {fmt(MOCK_BEST_HABIT.amount)} {t("currency")} {t("analytics.saved")}
+            </span>
+          </AnalyticsStatCard>
+
+          <AnalyticsStatCard className="items-center text-center justify-center">
+            <span className="text-xs" style={{ color: C.mutedForeground }}>
+              {t("analytics.youHaveCompleted")}
+            </span>
+            <span className="text-4xl font-bold my-1" style={{ ...mono, color: C.foreground }}>
+              {MOCK_COMPLETED_COUNT}
+            </span>
+            <span className="text-xs" style={{ color: C.mutedForeground }}>
+              {t("analytics.inThisSession")}
+            </span>
+          </AnalyticsStatCard>
+        </div>
+        <Top3DonutCard data={MOCK_TOP3} />
       </div>
     </div>
   );
@@ -2963,7 +3086,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           showToast={showToast}
         />
       )}
-      {tab === "analytics" && <AnalyticsPage checkins={checkins} habits={habits} withdrawable={balance.withdrawable_amount} />}
+      {tab === "analytics" && <AnalyticsPage />}
       {tab === "calendar" && (
         <HabitCalendarPage
           user={user}
