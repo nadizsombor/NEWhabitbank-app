@@ -55,6 +55,7 @@ import {
   updateHabit,
   deleteHabit,
   setHabitExcludedDates,
+  setHabitArchived,
 } from "./lib/api";
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap');
@@ -288,8 +289,8 @@ const TRANSLATIONS = {
   "modal.resetCalendarTitle": { en: "Reset Calendar", hu: "Naptár visszaállítása" },
   "modal.resetCalendarWarning": { en: "This cannot be undone.", hu: "Ez nem vonható vissza." },
   "modal.resetCalendarDesc": {
-    en: "This permanently deletes all your habits and their check-in history. Type RESET to confirm.",
-    hu: "Ez véglegesen törli az összes szokásodat és a hozzájuk tartozó check-in előzményeket. Írd be, hogy RESET a megerősítéshez.",
+    en: "Habits you've never checked off will be permanently deleted. Habits with completed check-ins are kept (so your Analytics history stays intact) but will stop appearing as upcoming. Type RESET to confirm.",
+    hu: "A soha ki nem pipált szokások véglegesen törlődnek. A már teljesített check-inekkel rendelkező szokások megmaradnak (hogy az Analytics előzményeid ne vesszenek el), de a jövőben már nem jelennek meg aktívként. Írd be, hogy RESET a megerősítéshez.",
   },
   "modal.resetCalendarConfirm": { en: "Delete Everything", hu: "Minden törlése" },
   "toast.calendarReset": { en: "Calendar reset", hu: "Naptár visszaállítva" },
@@ -2370,9 +2371,13 @@ function ThemeToggleRow() {
 
 /* ------------------------------ Habit calendar page ----------------------------- */
 
+// Archived habits (e.g. from a calendar reset) are hidden from today/future
+// so they stop being schedulable, but they still show up on past dates
+// exactly as if they weren't archived - so the calendar (and Analytics)
+// keep an accurate record of what was actually completed back then.
 const habitsForDate = (habits, iso) =>
   habits.filter((h) => {
-    if (h.archived) return false;
+    if (h.archived && iso >= todayStr()) return false;
     if ((h.excludedDates || []).includes(iso)) return false;
     if (h.type === "custom") return (h.scheduledDates || []).includes(iso);
     if (h.type === "weekly") return (h.weekdays || []).includes(new Date(iso + "T00:00:00").getDay());
@@ -3015,9 +3020,26 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, bal
 
   const handleResetCalendar = async () => {
     try {
-      await Promise.all(habits.map((h) => deleteHabit(h.id)));
-      setHabits([]);
-      setCheckins([]);
+      // Habits with at least one check-in have history the Analytics page
+      // depends on - deleting them would cascade-delete their check-ins too
+      // (schema: checkins.habit_id references habits(id) on delete cascade)
+      // and wipe that history. So those get archived (stop appearing as
+      // schedulable going forward) instead of deleted; only habits with zero
+      // check-ins ever - which have no history to lose - are hard-deleted.
+      const checkedHabitIds = new Set(checkins.map((c) => c.habit_id));
+      const habitsWithHistory = habits.filter((h) => checkedHabitIds.has(h.id));
+      const habitsWithoutHistory = habits.filter((h) => !checkedHabitIds.has(h.id));
+
+      await Promise.all([
+        ...habitsWithoutHistory.map((h) => deleteHabit(h.id)),
+        ...habitsWithHistory.map((h) => setHabitArchived(h.id, true)),
+      ]);
+
+      setHabits((prev) =>
+        prev
+          .filter((h) => checkedHabitIds.has(h.id))
+          .map((h) => ({ ...h, archived: true }))
+      );
       setShowResetConfirm(false);
       showToast(t("toast.calendarReset"));
     } catch (e) {

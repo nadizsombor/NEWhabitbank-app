@@ -117,3 +117,8 @@ export async function setHabitExcludedDates(habitId, excludedDates) {
   const { error } = await supabase.from("habits").update({ excluded_dates: excludedDates }).eq("id", habitId);
   if (error) throw error;
 }
+
+export async function setHabitArchived(habitId, archived) {
+  const { error } = await supabase.from("habits").update({ archived }).eq("id", habitId);
+  if (error) throw error;
+}
