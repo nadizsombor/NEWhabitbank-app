@@ -834,11 +834,11 @@ function BottomNav({ tab, setTab }) {
     <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none" style={{ paddingBottom: 20 }}>
       <div
         ref={containerRef}
-        className="relative flex items-center gap-1 rounded-full p-1.5 pointer-events-auto hb-glass"
+        className="relative flex items-center gap-1 rounded-full p-2 pointer-events-auto hb-glass"
       >
         {pill && (
           <div
-            className="absolute top-1.5 bottom-1.5 rounded-full"
+            className="absolute top-2 bottom-2 rounded-full"
             style={{
               left: pill.left,
               width: pill.width,
@@ -870,23 +870,15 @@ function BottomNav({ tab, setTab }) {
 
 /* --------------------------------- Header ---------------------------------- */
 
-function Header({ streak, onProfileClick }) {
+function Header({ onProfileClick }) {
   return (
-    <div className="flex items-center justify-between py-4">
+    <div className="flex items-center justify-end py-4">
       <button
         onClick={onProfileClick}
         className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70"
       >
         <User size={17} color={C.foreground} />
       </button>
-      <div
-        className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hb-glass"
-      >
-        <Flame size={14} color={C.foreground} />
-        <span className="text-xs font-semibold" style={{ color: C.foreground, ...mono }}>
-          {streak}
-        </span>
-      </div>
     </div>
   );
 }
@@ -1755,17 +1747,6 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
       .reduce((sum, c) => sum + (valueByHabit.get(c.habit_id) || 0), 0);
   }, [checkins, habits, selectedDate]);
 
-  const streak = useMemo(() => {
-    const daysWithCheckin = new Set(checkins.map((c) => c.completed_date));
-    let count = 0;
-    let cursor = daysWithCheckin.has(daysAgoStr(0)) ? 0 : 1;
-    while (daysWithCheckin.has(daysAgoStr(cursor))) {
-      count += 1;
-      cursor += 1;
-    }
-    return count;
-  }, [checkins]);
-
   const handleTopUp = async (amount) => {
     const next = { locked_amount: balance.locked_amount + amount, withdrawable_amount: balance.withdrawable_amount };
     setShowTopUp(false);
@@ -1890,7 +1871,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <Header streak={streak} onProfileClick={() => setTab("profile")} />
+      <Header onProfileClick={() => setTab("profile")} />
 
       <BalanceCard
         locked={balance.locked_amount}
@@ -2401,7 +2382,7 @@ function AnalyticsPage({ user, habits, checkins, balance, setCheckins, setBalanc
 
 /* --------------------------------- Profile page -------------------------------- */
 
-function ProfilePage({ user, onLogout }) {
+function ProfilePage({ user, onLogout, onBack }) {
   const { t, lang } = useLang();
   const initials = (user.full_name || "U")
     .split(" ")
@@ -2412,6 +2393,14 @@ function ProfilePage({ user, onLogout }) {
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
+      <div className="flex items-center py-4">
+        <button
+          onClick={onBack}
+          className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70"
+        >
+          <ArrowLeft size={17} color={C.foreground} />
+        </button>
+      </div>
       <div className="flex flex-col items-center py-8">
         <div
           className="w-20 h-20 rounded-full flex items-center justify-center mb-3 hb-glass"
@@ -3254,7 +3243,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           showToast={showToast}
         />
       )}
-      {tab === "profile" && <ProfilePage user={user} onLogout={onLogout} />}
+      {tab === "profile" && <ProfilePage user={user} onLogout={onLogout} onBack={() => setTab("home")} />}
       <BottomNav tab={tab} setTab={setTab} />
     </div>
   );
