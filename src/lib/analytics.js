@@ -37,9 +37,11 @@ import { useMemo } from "react";
 
 /**
  * @typedef {Object} AnalyticsResult
- * @property {number} completionPercentage   0-100, share of scheduled habit-days completed within the period
+ * @property {number} completionPercentage   0-100, savedAmount as a share of targetAmount
  * @property {number} savedAmount            amount actually earned within the period
- * @property {number} targetAmount           theoretical max if every scheduled habit in the period had been completed
+ * @property {number} targetAmount           the user's real total balance (locked + withdrawable), i.e.
+ *                                            what's shown on the Home page's balance cards - not a
+ *                                            theoretical "if every scheduled habit had been completed" figure
  * @property {number} totalSavedAllTime       amount earned across all check-ins ever recorded
  * @property {number[]} dailyTrend            amount earned per day, oldest first, length = trendDays
  * @property {BestEarningHabit|null} bestEarningHabit
@@ -98,6 +100,9 @@ const eachDateInRange = (startIso, endIso) => {
  * @param {string} [options.periodStart]   defaults to the 1st of the current month
  * @param {string} [options.periodEnd]     defaults to todayIso
  * @param {number} [options.trendDays]     defaults to 7
+ * @param {{locked_amount?: number, withdrawable_amount?: number}} [options.balance]
+ *        the same balance object the Home page reads - its locked_amount +
+ *        withdrawable_amount becomes targetAmount. Defaults to {0, 0}.
  * @returns {AnalyticsResult}
  */
 export function computeAnalytics(habits, checkins, options = {}) {
@@ -105,30 +110,29 @@ export function computeAnalytics(habits, checkins, options = {}) {
   const periodStart = options.periodStart || startOfMonthStr(todayIso);
   const periodEnd = options.periodEnd || todayIso;
   const trendDays = options.trendDays ?? 7;
+  const balance = options.balance || {};
 
   const valueByHabit = new Map(habits.map((h) => [h.id, h.value_usd]));
   const nameByHabit = new Map(habits.map((h) => [h.id, h.name]));
   const checkinKeySet = new Set(checkins.map((c) => `${c.habit_id}|${c.completed_date}`));
 
-  // --- completionPercentage / savedAmount / targetAmount / completedSessionCount ---
-  let scheduledSlots = 0;
-  let completedSlots = 0;
-  let targetAmount = 0;
-  let savedAmount = 0;
+  // targetAmount is the user's real total balance - what they've actually
+  // put in - not a theoretical "if every scheduled habit this period had
+  // been completed" figure. Must always match the Home page's balance cards.
+  const targetAmount = (balance.locked_amount || 0) + (balance.withdrawable_amount || 0);
 
+  // --- savedAmount within the period ---
+  let savedAmount = 0;
   for (const iso of eachDateInRange(periodStart, periodEnd)) {
     for (const habit of habits) {
       if (!isHabitDueOn(habit, iso)) continue;
-      scheduledSlots += 1;
-      targetAmount += habit.value_usd;
       if (checkinKeySet.has(`${habit.id}|${iso}`)) {
-        completedSlots += 1;
         savedAmount += habit.value_usd;
       }
     }
   }
 
-  const completionPercentage = scheduledSlots > 0 ? Math.round((completedSlots / scheduledSlots) * 100) : 0;
+  const completionPercentage = targetAmount > 0 ? Math.min(100, Math.round((savedAmount / targetAmount) * 100)) : 0;
 
   const completedSessionCount = checkins.filter(
     (c) => c.completed_date >= periodStart && c.completed_date <= periodEnd
@@ -188,9 +192,18 @@ export function computeAnalytics(habits, checkins, options = {}) {
  * @returns {AnalyticsResult}
  */
 export function useAnalytics(habits, checkins, options = {}) {
-  const { todayIso, periodStart, periodEnd, trendDays } = options;
+  const { todayIso, periodStart, periodEnd, trendDays, balance } = options;
+  const lockedAmount = balance?.locked_amount;
+  const withdrawableAmount = balance?.withdrawable_amount;
   return useMemo(
-    () => computeAnalytics(habits, checkins, { todayIso, periodStart, periodEnd, trendDays }),
-    [habits, checkins, todayIso, periodStart, periodEnd, trendDays]
+    () =>
+      computeAnalytics(habits, checkins, {
+        todayIso,
+        periodStart,
+        periodEnd,
+        trendDays,
+        balance: { locked_amount: lockedAmount, withdrawable_amount: withdrawableAmount },
+      }),
+    [habits, checkins, todayIso, periodStart, periodEnd, trendDays, lockedAmount, withdrawableAmount]
   );
 }

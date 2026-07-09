@@ -54,7 +54,10 @@ function loadMockData() {
       checkins.push({ id: `c-h3-${iso}`, habit_id: "h3", completed_date: iso, created_at: `${iso}T12:00:00Z` });
     }
   }
-  return { habits, checkins };
+  // targetAmount now comes from the balance (locked + withdrawable), same as
+  // the Home page's balance cards - not a theoretical schedule-based figure.
+  const balance = { locked_amount: 8500, withdrawable_amount: 1500 };
+  return { habits, checkins, balance };
 }
 
 function loadRealData() {
@@ -72,11 +75,17 @@ function loadRealData() {
     console.error(`${filePath} must be an object with "habits" and "checkins" arrays.`);
     process.exit(1);
   }
+  if (!parsed.balance) {
+    console.warn(
+      `Note: ${filePath} has no "balance" field - targetAmount will be $0. ` +
+        `Add { "balance": { "locked_amount": ..., "withdrawable_amount": ... } } to test it.`
+    );
+  }
   return parsed;
 }
 
-const { habits, checkins } = useReal ? loadRealData() : loadMockData();
-const result = computeAnalytics(habits, checkins, { todayIso, trendDays: 7 });
+const { habits, checkins, balance } = useReal ? loadRealData() : loadMockData();
+const result = computeAnalytics(habits, checkins, { todayIso, trendDays: 7, balance });
 
 console.log(`=== useAnalytics debug (${useReal ? "real data from scripts/real-data.json" : "mock data"}) ===`);
 console.log("todayIso:", todayIso, "| period: current month up to todayIso\n");

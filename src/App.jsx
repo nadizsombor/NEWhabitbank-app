@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from "react";
+import React, { useState, useMemo, useCallback, useEffect, useRef, useLayoutEffect } from "react";
 import bgImage from "./assets/bg.jpg";
 import {
   Landmark,
@@ -57,6 +57,7 @@ import {
   deleteHabit,
   setHabitExcludedDates,
   setHabitArchived,
+  resetUserDataForDev,
 } from "./lib/api";
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap');
@@ -808,31 +809,57 @@ function ResetPasswordPage({ goto, showToast }) {
 function BottomNav({ tab, setTab }) {
   const { t } = useLang();
   const items = [
-    { key: "home", label: t("nav.home"), icon: Home },
     { key: "analytics", label: t("nav.analytics"), icon: BarChart3 },
+    { key: "home", label: t("nav.home"), icon: Home },
     { key: "calendar", label: t("nav.habitCalendar"), icon: CalendarDays },
   ];
+
+  const containerRef = useRef(null);
+  const itemRefs = useRef({});
+  const [pill, setPill] = useState(null); // { left, width }
+
+  // Measure the active button's position/width relative to the pill bar so
+  // the dark highlight can slide (not just appear/disappear) between tabs,
+  // and always matches that item's actual size.
+  useLayoutEffect(() => {
+    const activeEl = itemRefs.current[tab];
+    const containerEl = containerRef.current;
+    if (!activeEl || !containerEl) return;
+    const containerRect = containerEl.getBoundingClientRect();
+    const activeRect = activeEl.getBoundingClientRect();
+    setPill({ left: activeRect.left - containerRect.left, width: activeRect.width });
+  }, [tab]);
+
   return (
-    <div
-      className="fixed bottom-0 left-0 right-0 h-16 z-40 hb-glass"
-      style={{
-        position: "fixed",
-        borderTop: `1px solid ${C.border}`,
-      }}
-    >
-      <div className="max-w-lg mx-auto h-full flex items-stretch">
+    <div className="fixed bottom-0 left-0 right-0 z-40 flex justify-center pointer-events-none" style={{ paddingBottom: 20 }}>
+      <div
+        ref={containerRef}
+        className="relative flex items-center gap-1 rounded-full p-1.5 pointer-events-auto hb-glass"
+      >
+        {pill && (
+          <div
+            className="absolute top-1.5 bottom-1.5 rounded-full"
+            style={{
+              left: pill.left,
+              width: pill.width,
+              background: C.primary,
+              transitionProperty: "left, width",
+              transitionDuration: "260ms",
+              transitionTimingFunction: "ease-in-out",
+            }}
+          />
+        )}
         {items.map(({ key, label, icon: Icon }) => {
           const active = tab === key;
           return (
             <button
               key={key}
+              ref={(el) => (itemRefs.current[key] = el)}
               onClick={() => setTab(key)}
-              className="flex-1 flex flex-col items-center justify-center gap-1 active:opacity-70"
+              aria-label={label}
+              className="relative z-10 w-14 h-12 rounded-full flex items-center justify-center active:opacity-70"
             >
-              <Icon size={20} color={active ? C.primary : C.mutedForeground} />
-              <span className="text-[10px] font-medium" style={{ color: active ? C.primary : C.mutedForeground, ...body }}>
-                {label}
-              </span>
+              <Icon size={20} color={active ? C.primaryForeground : C.mutedForeground} />
             </button>
           );
         })}
@@ -2210,9 +2237,28 @@ function AnalyticsPlaceholder({ label, className = "", style = {} }) {
 // lightest (white/outline) for #3, matching the app's black/white/gray rule.
 const TOP3_COLORS = ["#191919", "#9A9A96", "#FFFFFF"];
 
-function AnalyticsPage({ habits, checkins }) {
+function AnalyticsPage({ user, habits, checkins, balance, setCheckins, setBalance, showToast }) {
   const { t } = useLang();
-  const analytics = useAnalytics(habits, checkins);
+  const analytics = useAnalytics(habits, checkins, { balance });
+
+  // TODO: remove before production. Dev-only "reset my account" button -
+  // wipes the current user's check-in history and zeroes their balance so
+  // Analytics can be tested from a clean slate, without touching habit
+  // definitions. Confirmed server-side too: resetUserDataForDev() scopes
+  // both queries with .eq("user_id", userId), and RLS policies restrict
+  // delete/update to auth.uid() = user_id, so this can only ever affect the
+  // currently logged-in user's own data.
+  const handleDevReset = async () => {
+    if (!window.confirm("Biztos törlöd az összes adatod? Ez nem vonható vissza.")) return;
+    try {
+      await resetUserDataForDev(user.id);
+      setCheckins([]);
+      setBalance({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
+      showToast("Dev reset complete");
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
 
   // habits/checkins are already loaded by the time AppLayout can render
   // (the app shows a full-screen spinner until then), so there's no
@@ -2235,13 +2281,23 @@ function AnalyticsPage({ habits, checkins }) {
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <div className="flex items-center gap-2.5 py-4">
-        <div className="w-8 h-8 rounded-xl flex items-center justify-center hb-glass">
-          <Landmark size={16} color={C.primary} />
+      <div className="flex items-center justify-between gap-2.5 py-4">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center hb-glass">
+            <Landmark size={16} color={C.primary} />
+          </div>
+          <span className="text-lg tracking-wide" style={heading}>
+            HabitBank
+          </span>
         </div>
-        <span className="text-lg tracking-wide" style={heading}>
-          HabitBank
-        </span>
+        {/* TODO: remove before production - dev-only reset button */}
+        <button
+          onClick={handleDevReset}
+          className="text-[10px] font-bold px-2.5 py-1.5 rounded-lg uppercase tracking-wide active:opacity-70"
+          style={{ background: "#FDECEC", color: "#E03E3E", border: "1px solid #F5C2C2" }}
+        >
+          Reset
+        </button>
       </div>
 
       <h1 className="text-xl tracking-wide mb-6" style={heading}>
@@ -3176,7 +3232,17 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           showToast={showToast}
         />
       )}
-      {tab === "analytics" && <AnalyticsPage habits={habits} checkins={checkins} />}
+      {tab === "analytics" && (
+        <AnalyticsPage
+          user={user}
+          habits={habits}
+          checkins={checkins}
+          balance={balance}
+          setCheckins={setCheckins}
+          setBalance={setBalance}
+          showToast={showToast}
+        />
+      )}
       {tab === "calendar" && (
         <HabitCalendarPage
           user={user}
@@ -3215,6 +3281,7 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
+
 
 
   useEffect(() => {

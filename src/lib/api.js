@@ -122,3 +122,20 @@ export async function setHabitArchived(habitId, archived) {
   const { error } = await supabase.from("habits").update({ archived }).eq("id", habitId);
   if (error) throw error;
 }
+
+// TODO: remove before production. Dev-only "reset my account" helper used by
+// the temporary debug button in the Analytics page - wipes check-in history
+// and zeroes the balance for the CURRENT user only (both queries are scoped
+// with .eq("user_id", userId), and RLS policies on checkins/balances already
+// restrict delete/update to auth.uid() = user_id, so this can never touch
+// another user's row even if called with a spoofed id).
+export async function resetUserDataForDev(userId) {
+  const { error: checkinsError } = await supabase.from("checkins").delete().eq("user_id", userId);
+  if (checkinsError) throw checkinsError;
+
+  const { error: balanceError } = await supabase
+    .from("balances")
+    .update({ locked_amount: 0, withdrawable_amount: 0 })
+    .eq("user_id", userId);
+  if (balanceError) throw balanceError;
+}
