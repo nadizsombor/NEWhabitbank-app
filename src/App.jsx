@@ -25,6 +25,11 @@ import {
   Repeat,
   Sun,
   Moon,
+  Menu,
+  Receipt,
+  HelpCircle,
+  Settings,
+  LogOut,
 } from "lucide-react";
 
 import {
@@ -60,7 +65,7 @@ import {
   resetUserDataForDev,
 } from "./lib/api";
 
-const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&display=swap');
+const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&family=Playfair+Display:wght@400;500&display=swap');
   .hb-glass {
     position: relative;
     overflow: hidden;
@@ -90,6 +95,26 @@ const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter
     .hb-fade-slide-up {
       animation: none;
       opacity: 1;
+    }
+  }
+  @keyframes hbOverlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes hbMenuSlideIn {
+    from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .hb-menu-overlay {
+    animation: hbOverlayFadeIn 0.18s ease-out;
+  }
+  .hb-menu-panel {
+    animation: hbMenuSlideIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: top right;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hb-menu-overlay, .hb-menu-panel {
+      animation: none;
     }
   }
 `;
@@ -162,6 +187,7 @@ let C = LIGHT_COLORS;
 const heading = { fontFamily: SYSTEM_FONT, fontWeight: 700, letterSpacing: "-0.015em" };
 const mono = { fontFamily: "'Roboto Mono', monospace" };
 const body = { fontFamily: SYSTEM_FONT, fontWeight: 400 };
+const wordmark = { fontFamily: "'Playfair Display', serif", fontWeight: 400 };
 
 /* ------------------------------- i18n ------------------------------- */
 
@@ -267,6 +293,10 @@ const TRANSLATIONS = {
   "modal.customRecurrence": { en: "Custom Recurrence", hu: "Egyedi ismétlődés" },
   "modal.customRecurrenceDesc": { en: "Pick specific days of the week", hu: "Válaszd ki a hét konkrét napjait" },
   "modal.noWeekdaysSelected": { en: "Pick at least one day of the week", hu: "Válassz ki legalább egy napot a hétből" },
+  "modal.repeatDuration": { en: "Repeat", hu: "Ismétlődés" },
+  "modal.forever": { en: "Forever", hu: "Örökre" },
+  "modal.until": { en: "Until...", hu: "Meddig..." },
+  "modal.addAnotherDate": { en: "+ Add another date", hu: "+ Újabb dátum hozzáadása" },
   "home.dailySavedLabel": { en: "Saved today", hu: "Ma megtakarítva" },
   "home.manageHabits": { en: "Manage habits", hu: "Szokások kezelése" },
   "modal.manageHabitsTitle": { en: "Manage Habits", hu: "Szokások kezelése" },
@@ -326,6 +356,12 @@ const TRANSLATIONS = {
     hu: "Még gyűjtjük az adatokat — teljesíts néhány szokást, hogy itt láthasd a statisztikáidat.",
   },
   "analytics.noCompletionsYet": { en: "No completions yet", hu: "Még nincs teljesítés" },
+  "menu.myProfile": { en: "My Profile", hu: "Profilom" },
+  "menu.transactionHistory": { en: "Transaction History", hu: "Tranzakciók előzményei" },
+  "menu.howToUse": { en: "How To Use", hu: "Használati útmutató" },
+  "menu.settings": { en: "Settings", hu: "Beállítások" },
+  "menu.logout": { en: "Logout", hu: "Kijelentkezés" },
+  "menu.comingSoon": { en: "Coming soon", hu: "Hamarosan" },
   "profile.email": { en: "Email", hu: "E-mail" },
   "profile.role": { en: "Role", hu: "Szerepkör" },
   "profile.roleUser": { en: "User", hu: "Felhasználó" },
@@ -870,15 +906,113 @@ function BottomNav({ tab, setTab }) {
 
 /* --------------------------------- Header ---------------------------------- */
 
-function Header({ onProfileClick }) {
+// Six-spoke asterisk, hand-drawn as three crossing lines rather than a font
+// glyph, so the stroke weight/length stay exact regardless of font rendering.
+function LumonAsterisk({ size = 18, color = "currentColor", strokeWidth = 1.8 }) {
+  const cx = 12;
+  const cy = 12;
+  const r = 9;
+  const spokes = [0, 60, 120].map((deg) => {
+    const rad = (deg * Math.PI) / 180;
+    const dx = r * Math.cos(rad);
+    const dy = r * Math.sin(rad);
+    return { x1: cx - dx, y1: cy - dy, x2: cx + dx, y2: cy + dy };
+  });
   return (
-    <div className="flex items-center justify-end py-4">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {spokes.map((s, i) => (
+        <line key={i} x1={s.x1} y1={s.y1} x2={s.x2} y2={s.y2} stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+      ))}
+    </svg>
+  );
+}
+
+function LogoMark({ size = 18 }) {
+  return (
+    <div className="flex items-center gap-2">
+      <LumonAsterisk size={size} color={C.foreground} />
+      <span className="text-lg" style={{ ...wordmark, color: C.foreground }}>
+        Lumon.
+      </span>
+    </div>
+  );
+}
+
+function Header({ onMenuClick }) {
+  return (
+    <div className="flex items-center justify-between py-4">
+      <LogoMark />
       <button
-        onClick={onProfileClick}
+        onClick={onMenuClick}
         className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70"
       >
-        <User size={17} color={C.foreground} />
+        <Menu size={17} color={C.foreground} />
       </button>
+    </div>
+  );
+}
+
+function HamburgerMenu({ onClose, onNavigate, onLogout }) {
+  const { t } = useLang();
+  const items = [
+    { key: "profile", label: t("menu.myProfile"), icon: User },
+    { key: "transactions", label: t("menu.transactionHistory"), icon: Receipt },
+    { key: "howto", label: t("menu.howToUse"), icon: HelpCircle },
+    { key: "settings", label: t("menu.settings"), icon: Settings },
+  ];
+
+  return (
+    <div className="fixed inset-0 z-50 hb-menu-overlay" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+      <div className="max-w-lg mx-auto px-4 pt-16 flex justify-end">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="hb-menu-panel w-56 rounded-2xl p-1.5 hb-glass"
+        >
+          {items.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              onClick={() => onNavigate(key)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:opacity-70"
+            >
+              <Icon size={17} color={C.foreground} />
+              <span className="text-sm font-medium" style={{ color: C.foreground, ...body }}>
+                {label}
+              </span>
+            </button>
+          ))}
+          <div className="my-1 h-px" style={{ background: C.border }} />
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl active:opacity-70"
+          >
+            <LogOut size={17} color={C.destructive} />
+            <span className="text-sm font-medium" style={{ color: C.destructive, ...body }}>
+              {t("menu.logout")}
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ComingSoonPage({ onBack }) {
+  const { t } = useLang();
+  return (
+    <div className="max-w-lg mx-auto px-4 pb-20">
+      <div className="flex items-center py-4">
+        <button
+          onClick={onBack}
+          className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70"
+        >
+          <ArrowLeft size={17} color={C.foreground} />
+        </button>
+      </div>
+      <div className="flex items-center justify-center" style={{ minHeight: "60vh" }}>
+        <span className="text-sm" style={{ color: C.mutedForeground, ...body }}>
+          {t("menu.comingSoon")}
+        </span>
+      </div>
     </div>
   );
 }
@@ -1260,14 +1394,61 @@ function FrequencyOption({ selected, onClick, icon: Icon, label, desc }) {
   );
 }
 
+// "Forever" (repeats with no end) vs "Until..." (repeats up to and including
+// a chosen date) - shared by Daily Habit and Custom Recurrence, both of which
+// persist the choice as habits.end_date (NULL = forever).
+function RepeatDurationToggle({ mode, setMode, endDate, setEndDate }) {
+  const { t } = useLang();
+  const { theme } = useTheme();
+  return (
+    <div className="mb-4">
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("modal.repeatDuration")}
+      </label>
+      <div className="flex rounded-full p-1 mb-2 hb-glass" style={{ background: C.muted }}>
+        {[
+          { key: "forever", label: t("modal.forever") },
+          { key: "until", label: t("modal.until") },
+        ].map((o) => {
+          const selected = mode === o.key;
+          return (
+            <button
+              key={o.key}
+              onClick={() => setMode(o.key)}
+              className="flex-1 text-xs font-semibold py-2 rounded-full transition-opacity active:opacity-80"
+              style={{ background: selected ? C.card : "transparent", color: selected ? C.foreground : C.mutedForeground }}
+            >
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+      {mode === "until" && (
+        <input
+          type="date"
+          value={endDate}
+          min={todayStr()}
+          onChange={(e) => setEndDate(e.target.value)}
+          className="w-full h-12 px-3.5 rounded-xl outline-none text-sm hb-glass"
+          style={{ color: C.foreground, colorScheme: theme, ...mono }}
+        />
+      )}
+    </div>
+  );
+}
+
 function AddHabitForm({ onClose, onConfirm }) {
   const { t, lang } = useLang();
   const { theme } = useTheme();
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [frequency, setFrequency] = useState("daily"); // daily | date | weekly
-  const [exactDate, setExactDate] = useState(todayStr());
+  const [exactDates, setExactDates] = useState([todayStr()]);
   const [selectedWeekdays, setSelectedWeekdays] = useState(new Set());
+  const [dailyEndMode, setDailyEndMode] = useState("forever"); // forever | until
+  const [dailyEndDate, setDailyEndDate] = useState(todayStr());
+  const [weeklyEndMode, setWeeklyEndMode] = useState("forever");
+  const [weeklyEndDate, setWeeklyEndDate] = useState(todayStr());
   const [error, setError] = useState("");
 
   const toggleWeekday = (day) => {
@@ -1279,13 +1460,26 @@ function AddHabitForm({ onClose, onConfirm }) {
     });
   };
 
+  const updateExactDate = (index, newDate) => {
+    setExactDates((prev) => prev.map((d, i) => (i === index ? newDate : d)));
+  };
+  const addExactDate = () => setExactDates((prev) => [...prev, prev[prev.length - 1] || todayStr()]);
+  const removeExactDate = (index) => setExactDates((prev) => prev.filter((_, i) => i !== index));
+
   const submit = () => {
     if (!name.trim() || !(Number(value) > 0)) return;
     setError("");
     if (frequency === "daily") {
-      onConfirm({ type: "daily", name: name.trim(), value_usd: Number(value) });
+      onConfirm({
+        type: "daily",
+        name: name.trim(),
+        value_usd: Number(value),
+        endDate: dailyEndMode === "until" ? dailyEndDate : null,
+      });
     } else if (frequency === "date") {
-      onConfirm({ type: "custom", name: name.trim(), value_usd: Number(value), scheduledDates: [exactDate] });
+      const dates = exactDates.filter(Boolean);
+      if (dates.length === 0) return;
+      onConfirm({ type: "custom", name: name.trim(), value_usd: Number(value), scheduledDates: dates });
     } else {
       if (selectedWeekdays.size === 0) {
         setError(t("modal.noWeekdaysSelected"));
@@ -1296,6 +1490,7 @@ function AddHabitForm({ onClose, onConfirm }) {
         name: name.trim(),
         value_usd: Number(value),
         weekdays: Array.from(selectedWeekdays),
+        endDate: weeklyEndMode === "until" ? weeklyEndDate : null,
       });
     }
   };
@@ -1355,38 +1550,79 @@ function AddHabitForm({ onClose, onConfirm }) {
         />
       </div>
 
-      {frequency === "date" && (
-        <input
-          type="date"
-          value={exactDate}
-          min={todayStr()}
-          onChange={(e) => setExactDate(e.target.value)}
-          className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
-          style={{ color: C.foreground, colorScheme: theme, ...mono }}
+      {frequency === "daily" && (
+        <RepeatDurationToggle
+          mode={dailyEndMode}
+          setMode={setDailyEndMode}
+          endDate={dailyEndDate}
+          setEndDate={setDailyEndDate}
         />
       )}
 
-      {frequency === "weekly" && (
-        <div className="flex items-center justify-between gap-1 mb-4">
-          {WEEKDAYS[lang].map((label, idx) => {
-            const selected = selectedWeekdays.has(idx);
-            return (
-              <button
-                key={idx}
-                onClick={() => toggleWeekday(idx)}
-                className="flex-1 aspect-square rounded-lg flex items-center justify-center text-xs"
-                style={{
-                  background: selected ? C.primary : C.muted,
-                  color: selected ? C.primaryForeground : C.foreground,
-                  fontWeight: selected ? 600 : 400,
-                  ...mono,
-                }}
-              >
-                {label[0]}
-              </button>
-            );
-          })}
+      {frequency === "date" && (
+        <div className="mb-4">
+          <div className="space-y-2 mb-2">
+            {exactDates.map((d, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={d}
+                  min={todayStr()}
+                  onChange={(e) => updateExactDate(i, e.target.value)}
+                  className="flex-1 h-12 px-3.5 rounded-xl outline-none text-sm hb-glass"
+                  style={{ color: C.foreground, colorScheme: theme, ...mono }}
+                />
+                {exactDates.length > 1 && (
+                  <button
+                    onClick={() => removeExactDate(i)}
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
+                    style={{ background: C.destructiveMuted }}
+                  >
+                    <Trash2 size={14} color={C.destructive} />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={addExactDate}
+            className="text-xs font-semibold active:opacity-70"
+            style={{ color: C.primary }}
+          >
+            {t("modal.addAnotherDate")}
+          </button>
         </div>
+      )}
+
+      {frequency === "weekly" && (
+        <>
+          <div className="flex items-center justify-between gap-1 mb-4">
+            {WEEKDAYS[lang].map((label, idx) => {
+              const selected = selectedWeekdays.has(idx);
+              return (
+                <button
+                  key={idx}
+                  onClick={() => toggleWeekday(idx)}
+                  className="flex-1 aspect-square rounded-lg flex items-center justify-center text-xs"
+                  style={{
+                    background: selected ? C.primary : C.muted,
+                    color: selected ? C.primaryForeground : C.foreground,
+                    fontWeight: selected ? 600 : 400,
+                    ...mono,
+                  }}
+                >
+                  {label[0]}
+                </button>
+              );
+            })}
+          </div>
+          <RepeatDurationToggle
+            mode={weeklyEndMode}
+            setMode={setWeeklyEndMode}
+            endDate={weeklyEndDate}
+            setEndDate={setWeeklyEndDate}
+          />
+        </>
       )}
 
       {error && (
@@ -1689,16 +1925,16 @@ function useAddHabitFlow(user, setHabits, showToast) {
   const { t } = useLang();
   const [showForm, setShowForm] = useState(false);
 
-  const handleCreateHabit = async ({ type, name, value_usd, scheduledDates, weekdays }) => {
+  const handleCreateHabit = async ({ type, name, value_usd, scheduledDates, weekdays, endDate }) => {
     setShowForm(false);
     try {
       let habit;
       if (type === "daily") {
-        habit = await addDailyHabit(user.id, name, value_usd);
+        habit = await addDailyHabit(user.id, name, value_usd, endDate);
       } else if (type === "custom") {
         habit = await addCustomHabit(user.id, name, value_usd, scheduledDates);
       } else {
-        habit = await addWeeklyHabit(user.id, name, value_usd, weekdays);
+        habit = await addWeeklyHabit(user.id, name, value_usd, weekdays, endDate);
       }
       setHabits((prev) => [...prev, habit]);
       showToast(t("toast.habitCreated"));
@@ -1712,13 +1948,14 @@ function useAddHabitFlow(user, setHabits, showToast) {
 
 /* ---------------------------------- Home page --------------------------------- */
 
-function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast }) {
+function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast, onLogout }) {
   const { t, lang } = useLang();
   const [showTopUp, setShowTopUp] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
   const addFlow = useAddHabitFlow(user, setHabits, showToast);
   const [showManage, setShowManage] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [pendingUncheck, setPendingUncheck] = useState(null);
   const [pendingPastCheckin, setPendingPastCheckin] = useState(null);
   const [checkingId, setCheckingId] = useState(null);
@@ -1871,7 +2108,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
-      <Header onProfileClick={() => setTab("profile")} />
+      <Header onMenuClick={() => setShowMenu(true)} />
 
       <BalanceCard
         locked={balance.locked_amount}
@@ -1980,6 +2217,19 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
       )}
       {addFlow.showForm && (
         <AddHabitForm onClose={() => addFlow.setShowForm(false)} onConfirm={addFlow.handleCreateHabit} />
+      )}
+      {showMenu && (
+        <HamburgerMenu
+          onClose={() => setShowMenu(false)}
+          onNavigate={(key) => {
+            setShowMenu(false);
+            setTab(key);
+          }}
+          onLogout={() => {
+            setShowMenu(false);
+            onLogout();
+          }}
+        />
       )}
     </div>
   );
@@ -2263,14 +2513,7 @@ function AnalyticsPage({ user, habits, checkins, balance, setCheckins, setBalanc
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
       <div className="flex items-center justify-between gap-2.5 py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl flex items-center justify-center hb-glass">
-            <Landmark size={16} color={C.primary} />
-          </div>
-          <span className="text-lg tracking-wide" style={heading}>
-            HabitBank
-          </span>
-        </div>
+        <LogoMark />
         {/* TODO: remove before production - dev-only reset button */}
         <button
           onClick={handleDevReset}
@@ -2491,6 +2734,9 @@ function ThemeToggleRow() {
 const habitsForDate = (habits, iso) =>
   habits.filter((h) => {
     if (h.archived && iso >= todayStr()) return false;
+    // "Until <end_date>": the habit stops recurring after that day (custom
+    // habits never set end_date, so this never affects them).
+    if (h.endDate && iso > h.endDate) return false;
     if ((h.excludedDates || []).includes(iso)) return false;
     if (h.type === "custom") return (h.scheduledDates || []).includes(iso);
     if (h.type === "weekly") return (h.weekdays || []).includes(new Date(iso + "T00:00:00").getDay());
@@ -3219,6 +3465,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           balance={balance}
           setBalance={setBalance}
           showToast={showToast}
+          onLogout={onLogout}
         />
       )}
       {tab === "analytics" && (
@@ -3244,6 +3491,9 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
         />
       )}
       {tab === "profile" && <ProfilePage user={user} onLogout={onLogout} onBack={() => setTab("home")} />}
+      {tab === "transactions" && <ComingSoonPage onBack={() => setTab("home")} />}
+      {tab === "howto" && <ComingSoonPage onBack={() => setTab("home")} />}
+      {tab === "settings" && <ComingSoonPage onBack={() => setTab("home")} />}
       <BottomNav tab={tab} setTab={setTab} />
     </div>
   );
@@ -3270,6 +3520,7 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
+
 
 
 

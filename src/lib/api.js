@@ -9,6 +9,7 @@ const fromDbHabit = (h) => ({
   scheduledDates: h.scheduled_dates || [],
   weekdays: h.weekdays || [],
   excludedDates: h.excluded_dates || [],
+  endDate: h.end_date || null,
 });
 
 export async function loadUserData(userId) {
@@ -36,10 +37,10 @@ export async function loadUserData(userId) {
   };
 }
 
-export async function addDailyHabit(userId, name, value_usd) {
+export async function addDailyHabit(userId, name, value_usd, endDate = null) {
   const { data, error } = await supabase
     .from("habits")
-    .insert({ user_id: userId, name, value_usd, type: "daily" })
+    .insert({ user_id: userId, name, value_usd, type: "daily", end_date: endDate })
     .select()
     .single();
   if (error) throw error;
@@ -56,10 +57,10 @@ export async function addCustomHabit(userId, name, value_usd, scheduledDates) {
   return fromDbHabit(data);
 }
 
-export async function addWeeklyHabit(userId, name, value_usd, weekdays) {
+export async function addWeeklyHabit(userId, name, value_usd, weekdays, endDate = null) {
   const { data, error } = await supabase
     .from("habits")
-    .insert({ user_id: userId, name, value_usd, type: "weekly", weekdays })
+    .insert({ user_id: userId, name, value_usd, type: "weekly", weekdays, end_date: endDate })
     .select()
     .single();
   if (error) throw error;

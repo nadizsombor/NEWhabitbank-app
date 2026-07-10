@@ -53,8 +53,13 @@ create table if not exists public.habits (
   weekdays integer[] not null default '{}',
   excluded_dates date[] not null default '{}',
   archived boolean not null default false,
+  -- "Until <date>" for daily/weekly habits; NULL means "Forever". Unused for
+  -- 'custom' habits, which already stop naturally once scheduled_dates runs out.
+  end_date date,
   created_at timestamptz not null default now()
 );
+
+alter table public.habits add column if not exists end_date date;
 
 create table if not exists public.checkins (
   id uuid primary key default gen_random_uuid(),

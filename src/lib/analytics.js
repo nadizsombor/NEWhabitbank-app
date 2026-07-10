@@ -38,7 +38,9 @@ import { useMemo } from "react";
 /**
  * @typedef {Object} AnalyticsResult
  * @property {number} completionPercentage   0-100, savedAmount as a share of targetAmount
- * @property {number} savedAmount            amount actually earned within the period
+ * @property {number} savedAmount            the user's current withdrawable_amount - i.e. what's actually
+ *                                            recoverable right now, not a checkin-history sum that stays
+ *                                            stale after a withdraw zeroes the real balance
  * @property {number} targetAmount           the user's real total balance (locked + withdrawable), i.e.
  *                                            what's shown on the Home page's balance cards - not a
  *                                            theoretical "if every scheduled habit had been completed" figure
@@ -67,27 +69,6 @@ const startOfMonthStr = (iso) => {
   return toLocalISODate(new Date(d.getFullYear(), d.getMonth(), 1));
 };
 
-// Same schedule rule as the calendar/home views: a habit counts as "due" on
-// a given day if it isn't archived, isn't excluded that day, and (for
-// custom/weekly types) actually falls on that day.
-const isHabitDueOn = (habit, iso) => {
-  if (habit.archived) return false;
-  if ((habit.excludedDates || []).includes(iso)) return false;
-  if (habit.type === "custom") return (habit.scheduledDates || []).includes(iso);
-  if (habit.type === "weekly") return (habit.weekdays || []).includes(new Date(iso + "T00:00:00").getDay());
-  return true; // "daily"
-};
-
-const eachDateInRange = (startIso, endIso) => {
-  const dates = [];
-  let cursor = startIso;
-  while (cursor <= endIso) {
-    dates.push(cursor);
-    cursor = shiftDateStr(cursor, 1);
-  }
-  return dates;
-};
-
 /**
  * Pure, framework-agnostic analytics calculation. Takes the same
  * `habits`/`checkins` shapes already loaded by `loadUserData()` in
@@ -114,24 +95,20 @@ export function computeAnalytics(habits, checkins, options = {}) {
 
   const valueByHabit = new Map(habits.map((h) => [h.id, h.value_usd]));
   const nameByHabit = new Map(habits.map((h) => [h.id, h.name]));
-  const checkinKeySet = new Set(checkins.map((c) => `${c.habit_id}|${c.completed_date}`));
 
   // targetAmount is the user's real total balance - what they've actually
   // put in - not a theoretical "if every scheduled habit this period had
   // been completed" figure. Must always match the Home page's balance cards.
   const targetAmount = (balance.locked_amount || 0) + (balance.withdrawable_amount || 0);
 
-  // --- savedAmount within the period ---
-  let savedAmount = 0;
-  for (const iso of eachDateInRange(periodStart, periodEnd)) {
-    for (const habit of habits) {
-      if (!isHabitDueOn(habit, iso)) continue;
-      if (checkinKeySet.has(`${habit.id}|${iso}`)) {
-        savedAmount += habit.value_usd;
-      }
-    }
-  }
+  // savedAmount mirrors the live withdrawable_amount - not a sum over this
+  // period's checkins - so a withdraw (which zeroes withdrawable_amount but
+  // never deletes checkins) is reflected immediately instead of leaving this
+  // stuck at a stale, already-cashed-out total.
+  const savedAmount = balance.withdrawable_amount || 0;
 
+  // Explicit 0/0 guard: with no balance at all (e.g. right after a full
+  // withdraw), both amounts are 0 and the ratio must read 0%, never NaN.
   const completionPercentage = targetAmount > 0 ? Math.min(100, Math.round((savedAmount / targetAmount) * 100)) : 0;
 
   const completedSessionCount = checkins.filter(
