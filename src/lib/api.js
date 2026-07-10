@@ -104,8 +104,31 @@ export async function removeCheckin(habitId, completedDate) {
   if (error) throw error;
 }
 
-export async function updateHabit(habitId, { name, value_usd }) {
-  const { error } = await supabase.from("habits").update({ name, value_usd }).eq("id", habitId);
+// `fields` uses the same JS-side (camelCase) shape as a habit object; only
+// keys that are actually present get written, everything else is left alone.
+export async function updateHabit(habitId, fields) {
+  const payload = {};
+  if (fields.name !== undefined) payload.name = fields.name;
+  if (fields.value_usd !== undefined) payload.value_usd = fields.value_usd;
+  if (fields.type !== undefined) payload.type = fields.type;
+  if (fields.weekdays !== undefined) payload.weekdays = fields.weekdays;
+  if (fields.scheduledDates !== undefined) payload.scheduled_dates = fields.scheduledDates;
+  if (fields.excludedDates !== undefined) payload.excluded_dates = fields.excludedDates;
+  if (fields.endDate !== undefined) payload.end_date = fields.endDate;
+  const { error } = await supabase.from("habits").update(payload).eq("id", habitId);
+  if (error) throw error;
+}
+
+// Moves a single check-in to a different habit_id. Used when a mistakenly
+// recurring (daily/weekly) habit gets corrected to a one-off event for just
+// one day: that day's check-in (if it exists) needs to follow the value it
+// actually belongs to, not stay attached to the still-recurring original.
+export async function reassignCheckin(oldHabitId, newHabitId, completedDate) {
+  const { error } = await supabase
+    .from("checkins")
+    .update({ habit_id: newHabitId })
+    .eq("habit_id", oldHabitId)
+    .eq("completed_date", completedDate);
   if (error) throw error;
 }
 

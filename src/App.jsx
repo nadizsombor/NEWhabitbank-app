@@ -30,6 +30,9 @@ import {
   HelpCircle,
   Settings,
   LogOut,
+  Pencil,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 
 import {
@@ -62,6 +65,7 @@ import {
   deleteHabit,
   setHabitExcludedDates,
   setHabitArchived,
+  reassignCheckin,
   resetUserDataForDev,
 } from "./lib/api";
 
@@ -229,6 +233,7 @@ const TRANSLATIONS = {
   "toast.topUpSuffix": { en: "added to locked balance", hu: "hozzáadva a zárolt egyenleghez" },
   "toast.withdrawComplete": { en: "Withdrawal complete", hu: "Kifizetés kész" },
   "toast.habitCreated": { en: "Habit created", hu: "Szokás létrehozva" },
+  "toast.habitUpdated": { en: "Habit updated", hu: "Szokás frissítve" },
   "toast.insufficientBalance": { en: "Insufficient balance", hu: "Nincs elég egyenleg" },
   "toast.earnedSuffix": { en: "earned", hu: "megszerezve" },
   "nav.home": { en: "Home", hu: "Kezdőlap" },
@@ -283,6 +288,7 @@ const TRANSLATIONS = {
   "habitType.dailyDesc": { en: "Shows up every single day", hu: "Minden nap megjelenik" },
   "habitType.custom": { en: "Custom Schedule", hu: "Egyéni napok" },
   "habitType.customDesc": { en: "Pick specific days on a calendar", hu: "Válaszd ki a napokat egy naptárból" },
+  "habitType.weekly": { en: "Custom Recurrence", hu: "Egyedi ismétlődés" },
   "modal.customHabitTitle": { en: "Custom Schedule Habit", hu: "Egyéni napos szokás" },
   "modal.selectDays": { en: "Select days", hu: "Napok kiválasztása" },
   "modal.daysSelected": { en: "days selected", hu: "nap kiválasztva" },
@@ -332,6 +338,20 @@ const TRANSLATIONS = {
   "calendar.addHabitForDay": { en: "Add habit for this day", hu: "Szokás hozzáadása erre a napra" },
   "calendar.editDay": { en: "Edit day", hu: "Nap szerkesztése" },
   "calendar.resetCalendar": { en: "Reset Calendar", hu: "Naptár visszaállítása" },
+  "calendar.editHabits": { en: "Edit Habits", hu: "Szokások szerkesztése" },
+  "modal.editHabitsTitle": { en: "Edit Habits", hu: "Szokások szerkesztése" },
+  "modal.activeHabits": { en: "Active", hu: "Aktív" },
+  "modal.archivedHabits": { en: "Archived", hu: "Archivált" },
+  "modal.dangerZone": { en: "Danger Zone", hu: "Veszélyzóna" },
+  "modal.editHabitTitle": { en: "Edit Habit", hu: "Szokás szerkesztése" },
+  "modal.applyScope": { en: "Apply changes to", hu: "A módosítás vonatkozzon" },
+  "modal.scopeThisDayOnly": { en: "This day only", hu: "Csak erre a napra" },
+  "modal.scopeEntireHabit": { en: "Entire habit (all occurrences)", hu: "A teljes szokásra (minden előfordulás)" },
+  "modal.whichDay": { en: "Which day?", hu: "Melyik napra?" },
+  "modal.scopeThisDayDesc": {
+    en: "Detaches this one day into its own one-time event, leaving the recurring habit untouched everywhere else.",
+    hu: "Ezt az egy napot leválasztja egy önálló, egyszeri eseménnyé, az ismétlődő szokást máshol nem érinti.",
+  },
   "modal.resetCalendarTitle": { en: "Reset Calendar", hu: "Naptár visszaállítása" },
   "modal.resetCalendarWarning": { en: "This cannot be undone.", hu: "Ez nem vonható vissza." },
   "modal.resetCalendarDesc": {
@@ -3371,10 +3391,450 @@ function DailyCalendarView({ habits, checkins, balance, user, setHabits, setChec
   );
 }
 
+// Full single-habit editor. For habits that already recur (daily/weekly),
+// offers a scope choice before saving: correct just one specific occurrence
+// (detaching it into its own one-time "custom" habit, moving that day's
+// check-in along with it if one exists) vs. editing the recurring definition
+// itself. "custom" habits skip the scope choice entirely - editing their
+// scheduled_dates is already day-level granular.
+function EditSingleHabitModal({ habit, checkins, user, onClose, onSaved, showToast }) {
+  const { t, lang } = useLang();
+  const { theme } = useTheme();
+  const canChooseScope = habit.type === "daily" || habit.type === "weekly";
+
+  const [name, setName] = useState(habit.name);
+  const [value, setValue] = useState(String(habit.value_usd));
+  const [type, setType] = useState(habit.type);
+  const [scheduledDates, setScheduledDates] = useState(habit.scheduledDates?.length ? habit.scheduledDates : [todayStr()]);
+  const [selectedWeekdays, setSelectedWeekdays] = useState(new Set(habit.weekdays || []));
+  const [endMode, setEndMode] = useState(habit.endDate ? "until" : "forever");
+  const [endDate, setEndDate] = useState(habit.endDate || todayStr());
+  const [scope, setScope] = useState("all"); // "all" | "day"
+  const [scopeDate, setScopeDate] = useState(todayStr());
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const toggleWeekday = (day) => {
+    setSelectedWeekdays((prev) => {
+      const next = new Set(prev);
+      if (next.has(day)) next.delete(day);
+      else next.add(day);
+      return next;
+    });
+  };
+  const updateScheduledDate = (i, d) => setScheduledDates((prev) => prev.map((x, idx) => (idx === i ? d : x)));
+  const addScheduledDate = () => setScheduledDates((prev) => [...prev, prev[prev.length - 1] || todayStr()]);
+  const removeScheduledDate = (i) => setScheduledDates((prev) => prev.filter((_, idx) => idx !== i));
+
+  const submit = async () => {
+    if (!name.trim() || !(Number(value) > 0)) return;
+    if (type === "weekly" && selectedWeekdays.size === 0) {
+      setError(t("modal.noWeekdaysSelected"));
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      if (canChooseScope && scope === "day") {
+        // Detach just this one day into its own one-time event, leaving the
+        // recurring habit's definition (type/schedule) untouched.
+        const newHabit = await addCustomHabit(user.id, name.trim(), Number(value), [scopeDate]);
+        const newExcludedDates = [...(habit.excludedDates || []), scopeDate];
+        await setHabitExcludedDates(habit.id, newExcludedDates);
+        const movedCheckin = checkins.find((c) => c.habit_id === habit.id && c.completed_date === scopeDate);
+        if (movedCheckin) {
+          await reassignCheckin(habit.id, newHabit.id, scopeDate);
+        }
+        onSaved({
+          kind: "detach",
+          originalHabitId: habit.id,
+          newExcludedDates,
+          newHabit,
+          movedCheckinId: movedCheckin?.id,
+        });
+      } else {
+        const fields = { name: name.trim(), value_usd: Number(value), type };
+        if (type === "weekly") {
+          fields.weekdays = Array.from(selectedWeekdays);
+          fields.endDate = endMode === "until" ? endDate : null;
+        } else if (type === "daily") {
+          fields.endDate = endMode === "until" ? endDate : null;
+        } else {
+          fields.scheduledDates = scheduledDates.filter(Boolean);
+        }
+        await updateHabit(habit.id, fields);
+        onSaved({ kind: "update", habitId: habit.id, fields });
+      }
+      showToast(t("toast.habitUpdated"));
+      onClose();
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+    setSaving(false);
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.editHabitTitle")} onClose={onClose} />
+
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("modal.name")}
+      </label>
+      <input
+        type="text"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-3 hb-glass"
+        style={{ color: C.foreground, ...body }}
+      />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("modal.valuePerCompletion")}
+      </label>
+      <input
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
+        style={{ color: C.foreground, ...mono }}
+      />
+
+      {canChooseScope && (
+        <div className="mb-4">
+          <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+            {t("modal.applyScope")}
+          </label>
+          <div className="space-y-2">
+            <FrequencyOption
+              selected={scope === "all"}
+              onClick={() => setScope("all")}
+              icon={Repeat}
+              label={t("modal.scopeEntireHabit")}
+              desc=""
+            />
+            <FrequencyOption
+              selected={scope === "day"}
+              onClick={() => setScope("day")}
+              icon={CalendarDays}
+              label={t("modal.scopeThisDayOnly")}
+              desc={t("modal.scopeThisDayDesc")}
+            />
+          </div>
+          {scope === "day" && (
+            <div className="mt-2">
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+                {t("modal.whichDay")}
+              </label>
+              <input
+                type="date"
+                value={scopeDate}
+                onChange={(e) => setScopeDate(e.target.value)}
+                className="w-full h-12 px-3.5 rounded-xl outline-none text-sm hb-glass"
+                style={{ color: C.foreground, colorScheme: theme, ...mono }}
+              />
+            </div>
+          )}
+        </div>
+      )}
+
+      {(!canChooseScope || scope === "all") && (
+        <>
+          <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+            {t("modal.frequency")}
+          </label>
+          <div className="space-y-2 mb-4">
+            <FrequencyOption
+              selected={type === "daily"}
+              onClick={() => setType("daily")}
+              icon={Flame}
+              label={t("habitType.daily")}
+              desc={t("habitType.dailyDesc")}
+            />
+            <FrequencyOption
+              selected={type === "custom"}
+              onClick={() => setType("custom")}
+              icon={CalendarDays}
+              label={t("modal.exactDate")}
+              desc={t("modal.exactDateDesc")}
+            />
+            <FrequencyOption
+              selected={type === "weekly"}
+              onClick={() => setType("weekly")}
+              icon={Repeat}
+              label={t("modal.customRecurrence")}
+              desc={t("modal.customRecurrenceDesc")}
+            />
+          </div>
+
+          {type === "daily" && (
+            <RepeatDurationToggle mode={endMode} setMode={setEndMode} endDate={endDate} setEndDate={setEndDate} />
+          )}
+
+          {type === "custom" && (
+            <div className="mb-4">
+              <div className="space-y-2 mb-2">
+                {scheduledDates.map((d, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={d}
+                      onChange={(e) => updateScheduledDate(i, e.target.value)}
+                      className="flex-1 h-12 px-3.5 rounded-xl outline-none text-sm hb-glass"
+                      style={{ color: C.foreground, colorScheme: theme, ...mono }}
+                    />
+                    {scheduledDates.length > 1 && (
+                      <button
+                        onClick={() => removeScheduledDate(i)}
+                        className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
+                        style={{ background: C.destructiveMuted }}
+                      >
+                        <Trash2 size={14} color={C.destructive} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={addScheduledDate} className="text-xs font-semibold active:opacity-70" style={{ color: C.primary }}>
+                {t("modal.addAnotherDate")}
+              </button>
+            </div>
+          )}
+
+          {type === "weekly" && (
+            <>
+              <div className="flex items-center justify-between gap-1 mb-4">
+                {WEEKDAYS[lang].map((label, idx) => {
+                  const selected = selectedWeekdays.has(idx);
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => toggleWeekday(idx)}
+                      className="flex-1 aspect-square rounded-lg flex items-center justify-center text-xs"
+                      style={{
+                        background: selected ? C.primary : C.muted,
+                        color: selected ? C.primaryForeground : C.foreground,
+                        fontWeight: selected ? 600 : 400,
+                        ...mono,
+                      }}
+                    >
+                      {label[0]}
+                    </button>
+                  );
+                })}
+              </div>
+              <RepeatDurationToggle mode={endMode} setMode={setEndMode} endDate={endDate} setEndDate={setEndDate} />
+            </>
+          )}
+        </>
+      )}
+
+      {error && (
+        <p className="text-xs mb-3" style={{ color: C.destructive }}>
+          {error}
+        </p>
+      )}
+
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: "transparent", color: C.foreground, border: `1px solid ${C.border}` }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+function EditHabitsRow({ habit, onEdit, onToggleArchive, onRequestDelete }) {
+  const { t } = useLang();
+  return (
+    <div className="flex items-center gap-2 rounded-2xl px-3 py-2.5 hb-glass" style={{ opacity: habit.archived ? 0.6 : 1 }}>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-medium truncate" style={{ color: C.foreground, ...body }}>
+          {habit.name}
+        </div>
+        <div className="text-[11px] mt-0.5" style={{ color: C.mutedForeground, ...mono }}>
+          {formatUsd(habit.value_usd)} · {t(`habitType.${habit.type}`) || habit.type}
+        </div>
+      </div>
+      <button
+        onClick={() => onEdit(habit)}
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
+        style={{ background: C.muted }}
+      >
+        <Pencil size={13} color={C.foreground} />
+      </button>
+      <button
+        onClick={() => onToggleArchive(habit)}
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
+        style={{ background: C.muted }}
+      >
+        {habit.archived ? (
+          <ArchiveRestore size={13} color={C.foreground} />
+        ) : (
+          <Archive size={13} color={C.foreground} />
+        )}
+      </button>
+      <button
+        onClick={() => onRequestDelete(habit)}
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 active:opacity-60"
+        style={{ background: C.destructiveMuted }}
+      >
+        <Trash2 size={14} color={C.destructive} />
+      </button>
+    </div>
+  );
+}
+
+function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showToast, onClose, onResetCalendar }) {
+  const { t } = useLang();
+  const [editingHabit, setEditingHabit] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  const activeHabits = habits.filter((h) => !h.archived);
+  const archivedHabits = habits.filter((h) => h.archived);
+
+  const handleToggleArchive = async (habit) => {
+    try {
+      await setHabitArchived(habit.id, !habit.archived);
+      setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, archived: !habit.archived } : h)));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    const habit = pendingDelete;
+    setPendingDelete(null);
+    try {
+      await deleteHabit(habit.id);
+      setHabits((prev) => prev.filter((h) => h.id !== habit.id));
+      setCheckins((prev) => prev.filter((c) => c.habit_id !== habit.id));
+    } catch (e) {
+      showToast(e.message, "error");
+    }
+  };
+
+  const handleSaved = (result) => {
+    if (result.kind === "detach") {
+      setHabits((prev) => [
+        ...prev.map((h) => (h.id === result.originalHabitId ? { ...h, excludedDates: result.newExcludedDates } : h)),
+        result.newHabit,
+      ]);
+      if (result.movedCheckinId) {
+        setCheckins((prev) =>
+          prev.map((c) => (c.id === result.movedCheckinId ? { ...c, habit_id: result.newHabit.id } : c))
+        );
+      }
+    } else {
+      setHabits((prev) => prev.map((h) => (h.id === result.habitId ? { ...h, ...result.fields } : h)));
+    }
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("modal.editHabitsTitle")} onClose={onClose} />
+
+      {habits.length === 0 ? (
+        <p className="text-sm text-center py-6" style={{ color: C.mutedForeground }}>
+          {t("home.noHabits")}
+        </p>
+      ) : (
+        <div className="max-h-[55vh] overflow-y-auto space-y-4 mb-4">
+          {activeHabits.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-[11px] uppercase font-semibold" style={{ color: C.mutedForeground, letterSpacing: "0.04em" }}>
+                {t("modal.activeHabits")}
+              </span>
+              {activeHabits.map((h) => (
+                <EditHabitsRow
+                  key={h.id}
+                  habit={h}
+                  onEdit={setEditingHabit}
+                  onToggleArchive={handleToggleArchive}
+                  onRequestDelete={setPendingDelete}
+                />
+              ))}
+            </div>
+          )}
+          {archivedHabits.length > 0 && (
+            <div className="space-y-2">
+              <span className="text-[11px] uppercase font-semibold" style={{ color: C.mutedForeground, letterSpacing: "0.04em" }}>
+                {t("modal.archivedHabits")}
+              </span>
+              {archivedHabits.map((h) => (
+                <EditHabitsRow
+                  key={h.id}
+                  habit={h}
+                  onEdit={setEditingHabit}
+                  onToggleArchive={handleToggleArchive}
+                  onRequestDelete={setPendingDelete}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="pt-3" style={{ borderTop: `1px solid ${C.border}` }}>
+        <span className="text-[11px] uppercase font-semibold block mb-2" style={{ color: C.destructive, letterSpacing: "0.04em" }}>
+          {t("modal.dangerZone")}
+        </span>
+        <button
+          onClick={() => setShowResetConfirm(true)}
+          className="w-full text-xs font-medium py-3 rounded-xl active:opacity-70"
+          style={{ color: C.destructive, background: C.destructiveMuted }}
+        >
+          {t("calendar.resetCalendar")}
+        </button>
+      </div>
+
+      {editingHabit && (
+        <EditSingleHabitModal
+          habit={editingHabit}
+          checkins={checkins}
+          user={user}
+          onClose={() => setEditingHabit(null)}
+          onSaved={handleSaved}
+          showToast={showToast}
+        />
+      )}
+      {pendingDelete && (
+        <ConfirmDeleteHabitModal
+          habitName={pendingDelete.name}
+          onClose={() => setPendingDelete(null)}
+          onConfirm={handleConfirmDelete}
+        />
+      )}
+      {showResetConfirm && (
+        <ResetCalendarModal
+          onClose={() => setShowResetConfirm(false)}
+          onConfirm={async () => {
+            await onResetCalendar();
+            setShowResetConfirm(false);
+          }}
+        />
+      )}
+    </ModalBase>
+  );
+}
+
 function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, balance, showToast }) {
   const { t } = useLang();
   const [view, setView] = useState("monthly");
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showEditHabits, setShowEditHabits] = useState(false);
   const addFlow = useAddHabitFlow(user, setHabits, showToast);
 
   const handleResetCalendar = async () => {
@@ -3399,7 +3859,6 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, bal
           .filter((h) => checkedHabitIds.has(h.id))
           .map((h) => ({ ...h, archived: true }))
       );
-      setShowResetConfirm(false);
       showToast(t("toast.calendarReset"));
     } catch (e) {
       showToast(e.message, "error");
@@ -3431,18 +3890,28 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, bal
         {t("calendar.addHabits")}
       </button>
       <button
-        onClick={() => setShowResetConfirm(true)}
-        className="w-full text-xs font-medium py-3 mt-1 active:opacity-70"
-        style={{ color: C.destructive }}
+        onClick={() => setShowEditHabits(true)}
+        className="w-full flex items-center justify-center gap-1.5 text-sm font-semibold py-3 rounded-xl mt-1.5 hb-glass active:opacity-80"
+        style={{ color: C.foreground }}
       >
-        {t("calendar.resetCalendar")}
+        <Pencil size={13} />
+        {t("calendar.editHabits")}
       </button>
 
       {addFlow.showForm && (
         <AddHabitForm onClose={() => addFlow.setShowForm(false)} onConfirm={addFlow.handleCreateHabit} />
       )}
-      {showResetConfirm && (
-        <ResetCalendarModal onClose={() => setShowResetConfirm(false)} onConfirm={handleResetCalendar} />
+      {showEditHabits && (
+        <EditHabitsModal
+          habits={habits}
+          checkins={checkins}
+          user={user}
+          setHabits={setHabits}
+          setCheckins={setCheckins}
+          showToast={showToast}
+          onClose={() => setShowEditHabits(false)}
+          onResetCalendar={handleResetCalendar}
+        />
       )}
     </div>
   );
@@ -3520,6 +3989,7 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
+
 
 
 
