@@ -10,6 +10,7 @@ const fromDbHabit = (h) => ({
   weekdays: h.weekdays || [],
   excludedDates: h.excluded_dates || [],
   endDate: h.end_date || null,
+  deletedAt: h.deleted_at || null,
 });
 
 export async function loadUserData(userId) {
@@ -135,6 +136,16 @@ export async function reassignCheckin(oldHabitId, newHabitId, completedDate) {
 export async function deleteHabit(habitId) {
   const { error } = await supabase.from("habits").delete().eq("id", habitId);
   if (error) throw error;
+}
+
+// Soft delete: hides the habit from future scheduling but keeps the row (and
+// therefore its check-in history, referenced by checkins.habit_id) intact -
+// a real DELETE would cascade-delete those check-ins and erase real history.
+export async function softDeleteHabit(habitId) {
+  const deleted_at = new Date().toISOString();
+  const { error } = await supabase.from("habits").update({ deleted_at }).eq("id", habitId);
+  if (error) throw error;
+  return deleted_at;
 }
 
 export async function setHabitExcludedDates(habitId, excludedDates) {

@@ -12,7 +12,11 @@ import {
   Plus,
   X,
   Mail,
-  Shield,
+  Globe,
+  Clock,
+  Bell,
+  Download,
+  MessageSquare,
   CalendarDays,
   KeyRound,
   ArrowLeft,
@@ -26,7 +30,7 @@ import {
   Sun,
   Moon,
   Menu,
-  Receipt,
+  ListChecks,
   HelpCircle,
   Settings,
   LogOut,
@@ -63,6 +67,7 @@ import {
   removeCheckin,
   updateHabit,
   deleteHabit,
+  softDeleteHabit,
   setHabitExcludedDates,
   setHabitArchived,
   reassignCheckin,
@@ -377,17 +382,48 @@ const TRANSLATIONS = {
   },
   "analytics.noCompletionsYet": { en: "No completions yet", hu: "Még nincs teljesítés" },
   "menu.myProfile": { en: "My Profile", hu: "Profilom" },
-  "menu.transactionHistory": { en: "Transaction History", hu: "Tranzakciók előzményei" },
+  "menu.transactionHistory": { en: "Habit History", hu: "Szokás előzmények" },
   "menu.howToUse": { en: "How To Use", hu: "Használati útmutató" },
   "menu.settings": { en: "Settings", hu: "Beállítások" },
   "menu.logout": { en: "Logout", hu: "Kijelentkezés" },
   "menu.comingSoon": { en: "Coming soon", hu: "Hamarosan" },
   "profile.email": { en: "Email", hu: "E-mail" },
-  "profile.role": { en: "Role", hu: "Szerepkör" },
-  "profile.roleUser": { en: "User", hu: "Felhasználó" },
-  "profile.memberSince": { en: "Member since", hu: "Tag óta" },
   "profile.logout": { en: "Log Out", hu: "Kijelentkezés" },
   "profile.darkMode": { en: "Dark Mode", hu: "Sötét mód" },
+  "profile.accountSecurity": { en: "Account & Security", hu: "Fiók és biztonság" },
+  "profile.name": { en: "Name", hu: "Név" },
+  "profile.nationality": { en: "Nationality", hu: "Nemzetiség" },
+  "profile.selectNationality": { en: "Select a country...", hu: "Válassz országot..." },
+  "profile.timezone": { en: "Time Zone", hu: "Időzóna" },
+  "profile.password": { en: "Password", hu: "Jelszó" },
+  "profile.changePassword": { en: "Change Password", hu: "Jelszó megváltoztatása" },
+  "profile.currentPassword": { en: "Current password", hu: "Jelenlegi jelszó" },
+  "profile.newPassword": { en: "New password", hu: "Új jelszó" },
+  "profile.confirmNewPassword": { en: "Confirm new password", hu: "Új jelszó megerősítése" },
+  "profile.passwordTooShort": { en: "Password must be at least 8 characters", hu: "A jelszónak legalább 8 karakter hosszúnak kell lennie" },
+  "profile.passwordMismatch": { en: "Passwords do not match", hu: "A jelszavak nem egyeznek" },
+  "profile.deleteAccount": { en: "Delete Account", hu: "Fiók törlése" },
+  "profile.deleteAccountTitle": { en: "Delete Account", hu: "Fiók törlése" },
+  "profile.deleteAccountWarning": { en: "This cannot be undone.", hu: "Ez nem vonható vissza." },
+  "profile.deleteAccountDesc": {
+    en: "This permanently deletes your account and all of your data - habits, check-ins, and balance. Type DELETE to confirm.",
+    hu: "Ez véglegesen törli a fiókodat és minden adatodat — szokásokat, check-ineket és egyenleget. Írd be, hogy DELETE a megerősítéshez.",
+  },
+  "profile.deleteAccountConfirm": { en: "Delete Account", hu: "Fiók törlése" },
+  "profile.preferences": { en: "Preferences", hu: "Beállítások" },
+  "profile.weekStart": { en: "Week starts on", hu: "A hét első napja" },
+  "profile.monday": { en: "Monday", hu: "Hétfő" },
+  "profile.sunday": { en: "Sunday", hu: "Vasárnap" },
+  "profile.notifications": { en: "Notifications", hu: "Értesítések" },
+  "profile.data": { en: "Data", hu: "Adatkezelés" },
+  "profile.exportData": { en: "Export Data", hu: "Adatok exportálása" },
+  "profile.support": { en: "Support", hu: "Támogatás" },
+  "profile.sendFeedback": { en: "Send Feedback", hu: "Visszajelzés küldése" },
+  "profile.feedbackPlaceholder": {
+    en: "Tell us what's working, what isn't, or what you'd like to see...",
+    hu: "Írd meg, mi működik jól, mi nem, vagy mit szeretnél látni...",
+  },
+  "modal.send": { en: "Send", hu: "Küldés" },
   "habit.workout": { en: "Workout", hu: "Edzés" },
   "habit.read": { en: "Read", hu: "Olvasás" },
   "habit.meditate": { en: "Meditate", hu: "Meditáció" },
@@ -431,13 +467,6 @@ const dayNum = (iso) => new Date(iso + "T00:00:00").getDate();
 const MONTHS = {
   en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
   hu: ["jan.", "febr.", "márc.", "ápr.", "máj.", "jún.", "júl.", "aug.", "szept.", "okt.", "nov.", "dec."],
-};
-const formatMemberSince = (iso, lang) => {
-  const d = new Date(iso + "T00:00:00");
-  if (lang === "hu") {
-    return `${d.getFullYear()}. ${MONTHS.hu[d.getMonth()]} ${d.getDate()}.`;
-  }
-  return `${MONTHS.en[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 };
 const formatShortDate = (iso, lang) => {
   const d = new Date(iso + "T00:00:00");
@@ -976,7 +1005,7 @@ function HamburgerMenu({ onClose, onNavigate, onLogout }) {
   const { t } = useLang();
   const items = [
     { key: "profile", label: t("menu.myProfile"), icon: User },
-    { key: "transactions", label: t("menu.transactionHistory"), icon: Receipt },
+    { key: "transactions", label: t("menu.transactionHistory"), icon: ListChecks },
     { key: "howto", label: t("menu.howToUse"), icon: HelpCircle },
     { key: "settings", label: t("menu.settings"), icon: Settings },
   ];
@@ -1982,7 +2011,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
   const [selectedDate, setSelectedDate] = useState(todayStr());
 
   const today = todayStr();
-  const activeHabits = habitsForDate(habits, selectedDate);
+  const activeHabits = habitsForDate(habits, selectedDate, checkins);
   const checkinsOnSelected = useMemo(
     () => checkins.filter((c) => c.completed_date === selectedDate),
     [checkins, selectedDate]
@@ -2056,9 +2085,8 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
 
   const handleDeleteHabit = async (id) => {
     try {
-      await deleteHabit(id);
-      setHabits((prev) => prev.filter((h) => h.id !== id));
-      setCheckins((prev) => prev.filter((c) => c.habit_id !== id));
+      const deletedAt = await softDeleteHabit(id);
+      setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, deletedAt } : h)));
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -2225,7 +2253,7 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
       )}
       {showManage && (
         <ManageHabitsModal
-          habits={habits}
+          habits={habits.filter((h) => !h.archived && !h.deletedAt)}
           onClose={() => setShowManage(false)}
           onSaveChanges={handleSaveHabitChanges}
           onDeleteHabit={handleDeleteHabit}
@@ -2645,14 +2673,532 @@ function AnalyticsPage({ user, habits, checkins, balance, setCheckins, setBalanc
 
 /* --------------------------------- Profile page -------------------------------- */
 
-function ProfilePage({ user, onLogout, onBack }) {
+function ProfileSectionLabel({ children }) {
+  return (
+    <div
+      className="text-[11px] uppercase font-semibold mt-6 mb-2 px-1"
+      style={{ color: C.mutedForeground, letterSpacing: "0.04em" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function ProfileNavRow({ icon, label, value, onClick, danger }) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b active:opacity-70"
+      style={{ borderColor: C.border }}
+    >
+      {icon}
+      <div className="flex-1 flex items-center justify-between min-w-0 gap-2">
+        <span className="text-sm shrink-0" style={{ color: danger ? C.destructive : C.mutedForeground }}>
+          {label}
+        </span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {value && (
+            <span
+              className="text-sm font-medium truncate"
+              style={{ color: danger ? C.destructive : C.foreground }}
+            >
+              {value}
+            </span>
+          )}
+          <ChevronRight size={14} color={danger ? C.destructive : C.mutedForeground} className="shrink-0" />
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function ProfileToggleRow({ icon, label, checked, onChange }) {
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b"
+      style={{ borderColor: C.border }}
+    >
+      {icon}
+      <div className="flex-1 flex items-center justify-between">
+        <span className="text-sm" style={{ color: C.mutedForeground }}>
+          {label}
+        </span>
+        <button
+          onClick={() => onChange(!checked)}
+          aria-label={label}
+          className="w-11 h-6 rounded-full relative shrink-0 transition-colors"
+          style={{ background: checked ? C.primary : C.border }}
+        >
+          <span
+            className="absolute top-0.5 w-5 h-5 rounded-full transition-all"
+            style={{ left: checked ? "22px" : "2px", background: checked ? C.primaryForeground : "#FFFFFF" }}
+          />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ProfileSegmentRow({ icon, label, options, value, onChange }) {
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b"
+      style={{ borderColor: C.border }}
+    >
+      {icon}
+      <div className="flex-1 flex items-center justify-between gap-2">
+        <span className="text-sm shrink-0" style={{ color: C.mutedForeground }}>
+          {label}
+        </span>
+        <div className="flex rounded-full p-1 shrink-0" style={{ background: C.muted }}>
+          {options.map((o) => {
+            const selected = value === o.key;
+            return (
+              <button
+                key={o.key}
+                onClick={() => onChange(o.key)}
+                className="text-xs font-semibold px-3 py-1.5 rounded-full transition-opacity active:opacity-80"
+                style={{ background: selected ? C.card : "transparent", color: selected ? C.foreground : C.mutedForeground }}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThemeToggleRow() {
+  const { t } = useLang();
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <ProfileToggleRow
+      icon={isDark ? <Moon size={16} color={C.mutedForeground} /> : <Sun size={16} color={C.mutedForeground} />}
+      label={t("profile.darkMode")}
+      checked={isDark}
+      onChange={(next) => setTheme(next ? "dark" : "light")}
+    />
+  );
+}
+
+// Simple single-field editor reused for Name / Nationality / Email - all
+// three are just "label + text input + Save" with a different key/type.
+function EditTextFieldModal({ title, label, initialValue, placeholder, inputType = "text", onClose, onSave }) {
+  const { t } = useLang();
+  const [value, setValue] = useState(initialValue || "");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    await onSave(value.trim());
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={title} onClose={onClose} />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {label}
+      </label>
+      <input
+        autoFocus
+        type={inputType}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder={placeholder}
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-5 hb-glass"
+        style={{ color: C.foreground, ...body }}
+      />
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: C.primary, color: C.primaryForeground }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+// ISO 3166-1 alpha-2 codes. Kept as bare codes (no hardcoded English names)
+// so Intl.DisplayNames can render them in whichever language is active.
+const COUNTRY_CODES = [
+  "AF", "AL", "DZ", "AD", "AO", "AG", "AR", "AM", "AU", "AT", "AZ", "BS", "BH", "BD", "BB", "BY", "BE", "BZ", "BJ",
+  "BT", "BO", "BA", "BW", "BR", "BN", "BG", "BF", "BI", "CV", "KH", "CM", "CA", "CF", "TD", "CL", "CN", "CO", "KM",
+  "CG", "CD", "CR", "CI", "HR", "CU", "CY", "CZ", "DK", "DJ", "DM", "DO", "EC", "EG", "SV", "GQ", "ER", "EE", "SZ",
+  "ET", "FJ", "FI", "FR", "GA", "GM", "GE", "DE", "GH", "GR", "GD", "GT", "GN", "GW", "GY", "HT", "HN", "HU", "IS",
+  "IN", "ID", "IR", "IQ", "IE", "IL", "IT", "JM", "JP", "JO", "KZ", "KE", "KI", "KP", "KR", "KW", "KG", "LA", "LV",
+  "LB", "LS", "LR", "LY", "LI", "LT", "LU", "MG", "MW", "MY", "MV", "ML", "MT", "MH", "MR", "MU", "MX", "FM", "MD",
+  "MC", "MN", "ME", "MA", "MZ", "MM", "NA", "NR", "NP", "NL", "NZ", "NI", "NE", "NG", "MK", "NO", "OM", "PK", "PW",
+  "PA", "PG", "PY", "PE", "PH", "PL", "PT", "QA", "RO", "RU", "RW", "KN", "LC", "VC", "WS", "SM", "ST", "SA", "SN",
+  "RS", "SC", "SL", "SG", "SK", "SI", "SB", "SO", "ZA", "SS", "ES", "LK", "SD", "SR", "SE", "CH", "SY", "TW", "TJ",
+  "TZ", "TH", "TL", "TG", "TO", "TT", "TN", "TR", "TM", "TV", "UG", "UA", "AE", "GB", "US", "UY", "UZ", "VU", "VA",
+  "VE", "VN", "YE", "ZM", "ZW",
+];
+
+function EditNationalityModal({ initialValue, onClose, onSave }) {
   const { t, lang } = useLang();
-  const initials = (user.full_name || "U")
+  const countries = useMemo(() => {
+    let displayNames;
+    try {
+      displayNames = new Intl.DisplayNames([lang], { type: "region" });
+    } catch {
+      displayNames = null;
+    }
+    return COUNTRY_CODES.map((code) => ({ code, name: displayNames ? displayNames.of(code) : code })).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+  }, [lang]);
+  const [value, setValue] = useState(initialValue || "");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    await onSave(value);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("profile.nationality")} onClose={onClose} />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("profile.nationality")}
+      </label>
+      <select
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-5 hb-glass"
+        style={{ color: C.foreground, ...body }}
+      >
+        <option value="">{t("profile.selectNationality")}</option>
+        {countries.map((c) => (
+          <option key={c.code} value={c.name}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: C.primary, color: C.primaryForeground }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+function EditTimezoneModal({ initialValue, onClose, onSave }) {
+  const { t } = useLang();
+  const timezones = useMemo(() => {
+    try {
+      return Intl.supportedValuesOf("timeZone");
+    } catch {
+      return ["UTC", "Europe/Budapest", "Europe/London", "America/New_York", "America/Los_Angeles", "Asia/Tokyo"];
+    }
+  }, []);
+  const [value, setValue] = useState(initialValue || "UTC");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    setSaving(true);
+    await onSave(value);
+    setSaving(false);
+    onClose();
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("profile.timezone")} onClose={onClose} />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("profile.timezone")}
+      </label>
+      <select
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-5 hb-glass"
+        style={{ color: C.foreground, ...body }}
+      >
+        {timezones.map((tz) => (
+          <option key={tz} value={tz}>
+            {tz}
+          </option>
+        ))}
+      </select>
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: C.primary, color: C.primaryForeground }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+function ChangePasswordModal({ onClose, onSave }) {
+  const { t } = useLang();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const submit = async () => {
+    if (next.length < 8) {
+      setError(t("profile.passwordTooShort"));
+      return;
+    }
+    if (next !== confirm) {
+      setError(t("profile.passwordMismatch"));
+      return;
+    }
+    setError("");
+    setSaving(true);
+    await onSave({ current, next });
+    setSaving(false);
+    onClose();
+  };
+
+  const fieldStyle = "w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-3 hb-glass";
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("profile.changePassword")} onClose={onClose} />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("profile.currentPassword")}
+      </label>
+      <input
+        autoFocus
+        type="password"
+        value={current}
+        onChange={(e) => setCurrent(e.target.value)}
+        className={fieldStyle}
+        style={{ color: C.foreground, ...body }}
+      />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("profile.newPassword")}
+      </label>
+      <input
+        type="password"
+        value={next}
+        onChange={(e) => setNext(e.target.value)}
+        className={fieldStyle}
+        style={{ color: C.foreground, ...body }}
+      />
+      <label className="text-xs font-medium mb-1.5 block" style={{ color: C.mutedForeground }}>
+        {t("profile.confirmNewPassword")}
+      </label>
+      <input
+        type="password"
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        className={`${fieldStyle} mb-2`}
+        style={{ color: C.foreground, ...body }}
+      />
+      {error && (
+        <p className="text-xs mb-3" style={{ color: C.destructive }}>
+          {error}
+        </p>
+      )}
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={submit}
+          disabled={saving}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: C.primary, color: C.primaryForeground }}
+        >
+          {saving && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.save")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+function DeleteAccountModal({ onClose, onConfirm }) {
+  const { t } = useLang();
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const canConfirm = confirmText.trim().toUpperCase() === "DELETE";
+
+  const handleConfirm = async () => {
+    if (!canConfirm) return;
+    setDeleting(true);
+    await onConfirm();
+    setDeleting(false);
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("profile.deleteAccountTitle")} onClose={onClose} />
+      <p className="text-sm font-semibold mb-1" style={{ color: C.destructive }}>
+        {t("profile.deleteAccountWarning")}
+      </p>
+      <p className="text-xs mb-4" style={{ color: C.mutedForeground }}>
+        {t("profile.deleteAccountDesc")}
+      </p>
+      <input
+        type="text"
+        value={confirmText}
+        onChange={(e) => setConfirmText(e.target.value)}
+        placeholder="DELETE"
+        className="w-full h-12 px-3.5 rounded-xl outline-none text-sm mb-4 hb-glass"
+        style={{ color: C.foreground, ...mono }}
+      />
+      <button
+        onClick={handleConfirm}
+        disabled={!canConfirm || deleting}
+        className="w-full h-12 rounded-xl text-sm font-semibold disabled:opacity-40 transition-opacity active:opacity-80 flex items-center justify-center gap-2"
+        style={{ background: C.destructive, color: C.destructiveForeground }}
+      >
+        {deleting && <Loader2 size={15} className="animate-spin" />}
+        {t("profile.deleteAccountConfirm")}
+      </button>
+    </ModalBase>
+  );
+}
+
+function SendFeedbackModal({ onClose, onSubmit }) {
+  const { t } = useLang();
+  const [text, setText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const submit = async () => {
+    if (!text.trim()) return;
+    setSending(true);
+    await onSubmit(text.trim());
+    setSending(false);
+    onClose();
+  };
+
+  return (
+    <ModalBase onClose={onClose}>
+      <ModalHeader title={t("profile.sendFeedback")} onClose={onClose} />
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder={t("profile.feedbackPlaceholder")}
+        rows={5}
+        className="w-full px-3.5 py-3 rounded-xl outline-none text-sm mb-5 hb-glass resize-none"
+        style={{ color: C.foreground, ...body }}
+      />
+      <div className="flex gap-2.5">
+        <button
+          onClick={onClose}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold hb-glass transition-opacity active:opacity-80"
+          style={{ color: C.foreground }}
+        >
+          {t("modal.cancel")}
+        </button>
+        <button
+          onClick={submit}
+          disabled={sending}
+          className="flex-1 h-11 rounded-xl text-sm font-semibold transition-opacity active:opacity-80 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: C.primary, color: C.primaryForeground }}
+        >
+          {sending && <Loader2 size={14} className="animate-spin" />}
+          {t("modal.send")}
+        </button>
+      </div>
+    </ModalBase>
+  );
+}
+
+function ProfilePage({ user, onLogout, onBack }) {
+  const { t } = useLang();
+
+  // Local-only UI state for now - nothing here is persisted yet.
+  // TODO: load these from the `profiles` table (and auth user) on mount, and
+  // persist each field's edit via a real Supabase call (see the handlers
+  // below, each marked with its own TODO for the exact call it needs).
+  const [name, setName] = useState(user.full_name || "");
+  const [nationality, setNationality] = useState("");
+  const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [email, setEmail] = useState(user.email);
+  const [weekStart, setWeekStart] = useState("monday"); // "monday" | "sunday"
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+
+  const [editingField, setEditingField] = useState(null); // "name" | "nationality" | "timezone" | "email" | "password" | null
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
+
+  const initials = (name || "U")
     .split(" ")
     .map((s) => s[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  // TODO: update the `profiles` table (name) via Supabase.
+  const handleSaveName = async (value) => setName(value);
+  // TODO: update the `profiles` table (nationality) via Supabase.
+  const handleSaveNationality = async (value) => setNationality(value);
+  // TODO: update the `profiles` table (timezone) via Supabase.
+  const handleSaveTimezone = async (value) => setTimezone(value);
+  // TODO: supabase.auth.updateUser({ email: value }) - triggers a
+  // confirmation email flow on the real backend.
+  const handleSaveEmail = async (value) => setEmail(value);
+  // TODO: supabase.auth.updateUser({ password: next }), ideally after
+  // re-authenticating with `current` first.
+  const handleSavePassword = async () => {};
+  // TODO: delete all of the user's data (habits/checkins/balance/profile)
+  // and the auth user itself, then sign out.
+  const handleDeleteAccount = async () => {
+    setShowDeleteAccount(false);
+  };
+  // TODO: fetch the user's full data set and offer it as a JSON/CSV download.
+  const handleExportData = () => {};
+  // TODO: send `text` to a support inbox / ticketing endpoint.
+  const handleSendFeedback = async () => {};
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
@@ -2664,83 +3210,143 @@ function ProfilePage({ user, onLogout, onBack }) {
           <ArrowLeft size={17} color={C.foreground} />
         </button>
       </div>
-      <div className="flex flex-col items-center py-8">
-        <div
-          className="w-20 h-20 rounded-full flex items-center justify-center mb-3 hb-glass"
-        >
+      <div className="flex flex-col items-center py-6">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3 hb-glass">
           <span className="text-2xl" style={{ ...heading, color: C.primary }}>
             {initials}
           </span>
         </div>
         <span className="text-2xl tracking-wide" style={heading}>
-          {user.full_name}
+          {name}
         </span>
       </div>
 
+      <ProfileSectionLabel>{t("profile.accountSecurity")}</ProfileSectionLabel>
       <div className="rounded-2xl hb-glass">
-        <ProfileRow icon={<Mail size={16} color={C.mutedForeground} />} label={t("profile.email")} value={user.email} />
-        <ProfileRow icon={<Shield size={16} color={C.mutedForeground} />} label={t("profile.role")} value={t("profile.roleUser")} />
-        <ProfileRow icon={<CalendarDays size={16} color={C.mutedForeground} />} label={t("profile.memberSince")} value={formatMemberSince(user.created_date, lang)} />
+        <ProfileNavRow
+          icon={<User size={16} color={C.mutedForeground} />}
+          label={t("profile.name")}
+          value={name}
+          onClick={() => setEditingField("name")}
+        />
+        <ProfileNavRow
+          icon={<Globe size={16} color={C.mutedForeground} />}
+          label={t("profile.nationality")}
+          value={nationality || "—"}
+          onClick={() => setEditingField("nationality")}
+        />
+        <ProfileNavRow
+          icon={<Clock size={16} color={C.mutedForeground} />}
+          label={t("profile.timezone")}
+          value={timezone}
+          onClick={() => setEditingField("timezone")}
+        />
+        <ProfileNavRow
+          icon={<KeyRound size={16} color={C.mutedForeground} />}
+          label={t("profile.password")}
+          value="••••••••"
+          onClick={() => setEditingField("password")}
+        />
+        <ProfileNavRow
+          icon={<Mail size={16} color={C.mutedForeground} />}
+          label={t("profile.email")}
+          value={email}
+          onClick={() => setEditingField("email")}
+        />
+        <ProfileNavRow
+          icon={<LogOut size={16} color={C.mutedForeground} />}
+          label={t("profile.logout")}
+          onClick={onLogout}
+        />
+        <ProfileNavRow
+          icon={<Trash2 size={16} color={C.destructive} />}
+          label={t("profile.deleteAccount")}
+          onClick={() => setShowDeleteAccount(true)}
+          danger
+        />
+      </div>
+
+      <ProfileSectionLabel>{t("profile.preferences")}</ProfileSectionLabel>
+      <div className="rounded-2xl hb-glass">
         <ThemeToggleRow />
+        <ProfileSegmentRow
+          icon={<CalendarDays size={16} color={C.mutedForeground} />}
+          label={t("profile.weekStart")}
+          options={[
+            { key: "monday", label: t("profile.monday") },
+            { key: "sunday", label: t("profile.sunday") },
+          ]}
+          value={weekStart}
+          onChange={setWeekStart}
+        />
+        <ProfileToggleRow
+          icon={<Bell size={16} color={C.mutedForeground} />}
+          label={t("profile.notifications")}
+          checked={notificationsEnabled}
+          onChange={setNotificationsEnabled}
+        />
       </div>
 
-      <button
-        onClick={onLogout}
-        className="w-full h-12 rounded-xl text-sm font-medium mt-6 transition-opacity active:opacity-70 hb-glass"
-        style={{ color: C.destructive }}
-      >
-        {t("profile.logout")}
-      </button>
-    </div>
-  );
-}
-
-function ProfileRow({ icon, label, value }) {
-  return (
-    <div
-      className="flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b"
-      style={{ borderColor: C.border }}
-    >
-      {icon}
-      <div className="flex-1 flex items-center justify-between">
-        <span className="text-sm" style={{ color: C.mutedForeground }}>
-          {label}
-        </span>
-        <span className="text-sm font-medium" style={{ color: C.foreground }}>
-          {value}
-        </span>
+      <ProfileSectionLabel>{t("profile.data")}</ProfileSectionLabel>
+      <div className="rounded-2xl hb-glass">
+        <ProfileNavRow
+          icon={<Download size={16} color={C.mutedForeground} />}
+          label={t("profile.exportData")}
+          onClick={handleExportData}
+        />
       </div>
-    </div>
-  );
-}
 
-function ThemeToggleRow() {
-  const { t } = useLang();
-  const { theme, setTheme } = useTheme();
-  const isDark = theme === "dark";
-
-  return (
-    <div
-      className="flex items-center gap-3 px-4 py-3.5 [&:not(:last-child)]:border-b"
-      style={{ borderColor: C.border }}
-    >
-      {isDark ? <Moon size={16} color={C.mutedForeground} /> : <Sun size={16} color={C.mutedForeground} />}
-      <div className="flex-1 flex items-center justify-between">
-        <span className="text-sm" style={{ color: C.mutedForeground }}>
-          {t("profile.darkMode")}
-        </span>
-        <button
-          onClick={() => setTheme(isDark ? "light" : "dark")}
-          aria-label={t("profile.darkMode")}
-          className="w-11 h-6 rounded-full relative shrink-0 transition-colors"
-          style={{ background: isDark ? C.primary : C.border }}
-        >
-          <span
-            className="absolute top-0.5 w-5 h-5 rounded-full transition-all"
-            style={{ left: isDark ? "22px" : "2px", background: isDark ? C.primaryForeground : "#FFFFFF" }}
-          />
-        </button>
+      <ProfileSectionLabel>{t("profile.support")}</ProfileSectionLabel>
+      <div className="rounded-2xl hb-glass">
+        <ProfileNavRow
+          icon={<MessageSquare size={16} color={C.mutedForeground} />}
+          label={t("profile.sendFeedback")}
+          onClick={() => setShowFeedback(true)}
+        />
       </div>
+
+      {editingField === "name" && (
+        <EditTextFieldModal
+          title={t("profile.name")}
+          label={t("profile.name")}
+          initialValue={name}
+          onClose={() => setEditingField(null)}
+          onSave={handleSaveName}
+        />
+      )}
+      {editingField === "nationality" && (
+        <EditNationalityModal
+          initialValue={nationality}
+          onClose={() => setEditingField(null)}
+          onSave={handleSaveNationality}
+        />
+      )}
+      {editingField === "timezone" && (
+        <EditTimezoneModal
+          initialValue={timezone}
+          onClose={() => setEditingField(null)}
+          onSave={handleSaveTimezone}
+        />
+      )}
+      {editingField === "email" && (
+        <EditTextFieldModal
+          title={t("profile.email")}
+          label={t("profile.email")}
+          initialValue={email}
+          inputType="email"
+          onClose={() => setEditingField(null)}
+          onSave={handleSaveEmail}
+        />
+      )}
+      {editingField === "password" && (
+        <ChangePasswordModal onClose={() => setEditingField(null)} onSave={handleSavePassword} />
+      )}
+      {showDeleteAccount && (
+        <DeleteAccountModal onClose={() => setShowDeleteAccount(false)} onConfirm={handleDeleteAccount} />
+      )}
+      {showFeedback && (
+        <SendFeedbackModal onClose={() => setShowFeedback(false)} onSubmit={handleSendFeedback} />
+      )}
     </div>
   );
 }
@@ -2751,9 +3357,18 @@ function ThemeToggleRow() {
 // so they stop being schedulable, but they still show up on past dates
 // exactly as if they weren't archived - so the calendar (and Analytics)
 // keep an accurate record of what was actually completed back then.
-const habitsForDate = (habits, iso) =>
+// `checkins` is optional only for callers that never look at past days (none
+// currently, but keeps the signature forgiving); pass it whenever available.
+const habitsForDate = (habits, iso, checkins = []) =>
   habits.filter((h) => {
-    if (h.archived && iso >= todayStr()) return false;
+    // Archived (paused) or soft-deleted habits never show as schedulable
+    // today/in the future. On past days they reappear ONLY where a
+    // check-in actually proves the habit was done that day - the historical
+    // view is checkin-driven, not schedule-driven, once a habit is inactive.
+    if (h.archived || h.deletedAt) {
+      if (iso >= todayStr()) return false;
+      return checkins.some((c) => c.habit_id === h.id && c.completed_date === iso);
+    }
     // "Until <end_date>": the habit stops recurring after that day (custom
     // habits never set end_date, so this never affects them).
     if (h.endDate && iso > h.endDate) return false;
@@ -2925,7 +3540,7 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
-  const dayHabits = useMemo(() => habitsForDate(habits, dateIso), [habits, dateIso]);
+  const dayHabits = useMemo(() => habitsForDate(habits, dateIso, checkins), [habits, dateIso, checkins]);
   const isPastDay = dateIso < todayIso;
   const isHabitLocked = (habitId) => {
     const c = checkins.find((c) => c.habit_id === habitId && c.completed_date === dateIso);
@@ -2994,9 +3609,8 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
     try {
       for (const { habit, scope } of pendingDeletions) {
         if (scope === "entire") {
-          await deleteHabit(habit.id);
-          setHabits((prev) => prev.filter((h) => h.id !== habit.id));
-          setCheckins((prev) => prev.filter((c) => c.habit_id !== habit.id));
+          const deletedAt = await softDeleteHabit(habit.id);
+          setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, deletedAt } : h)));
         } else {
           const nextExcluded = [...(habit.excludedDates || []), dateIso];
           await setHabitExcludedDates(habit.id, nextExcluded);
@@ -3219,7 +3833,7 @@ function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCh
           if (d === null) return <div key={i} />;
           const iso = toIso(d);
           const isToday = iso === todayIso;
-          const dayHabits = habitsForDate(habits, iso);
+          const dayHabits = habitsForDate(habits, iso, checkins);
           return (
             <button
               key={i}
@@ -3293,7 +3907,7 @@ function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setChe
       <div className="grid grid-cols-7 gap-1">
         {days.map((iso) => {
           const isToday = iso === todayIso;
-          const dayHabits = habitsForDate(habits, iso);
+          const dayHabits = habitsForDate(habits, iso, checkins);
           return (
             <button
               key={iso}
@@ -3344,7 +3958,7 @@ function DailyCalendarView({ habits, checkins, balance, user, setHabits, setChec
   const todayIso = todayStr();
   const [selectedDate, setSelectedDate] = useState(todayIso);
   const [editing, setEditing] = useState(false);
-  const dayHabits = habitsForDate(habits, selectedDate);
+  const dayHabits = habitsForDate(habits, selectedDate, checkins);
 
   return (
     <div className="rounded-2xl p-4 hb-glass">
@@ -3703,8 +4317,9 @@ function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showT
   const [pendingDelete, setPendingDelete] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  const activeHabits = habits.filter((h) => !h.archived);
-  const archivedHabits = habits.filter((h) => h.archived);
+  const visibleHabits = habits.filter((h) => !h.deletedAt);
+  const activeHabits = visibleHabits.filter((h) => !h.archived);
+  const archivedHabits = visibleHabits.filter((h) => h.archived);
 
   const handleToggleArchive = async (habit) => {
     try {
@@ -3719,9 +4334,8 @@ function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showT
     const habit = pendingDelete;
     setPendingDelete(null);
     try {
-      await deleteHabit(habit.id);
-      setHabits((prev) => prev.filter((h) => h.id !== habit.id));
-      setCheckins((prev) => prev.filter((c) => c.habit_id !== habit.id));
+      const deletedAt = await softDeleteHabit(habit.id);
+      setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, deletedAt } : h)));
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -3747,7 +4361,7 @@ function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showT
     <ModalBase onClose={onClose}>
       <ModalHeader title={t("modal.editHabitsTitle")} onClose={onClose} />
 
-      {habits.length === 0 ? (
+      {visibleHabits.length === 0 ? (
         <p className="text-sm text-center py-6" style={{ color: C.mutedForeground }}>
           {t("home.noHabits")}
         </p>
@@ -3989,7 +4603,6 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
-
 
 
 
