@@ -436,6 +436,16 @@ const makeT = (lang) => (key) => TRANSLATIONS[key] ? TRANSLATIONS[key][lang] : k
 const ThemeContext = React.createContext({ theme: "light", setTheme: () => {} });
 const useTheme = () => React.useContext(ThemeContext);
 
+// "monday" | "sunday" - which weekday the Habit Calendar's Monthly/Weekly
+// views (and the My Profile "Week starts on" toggle) treat as the first
+// day of the week. Purely a display/ordering preference - never changes
+// which day-of-week number (0=Sunday..6=Saturday) a habit is scheduled on.
+const WeekStartContext = React.createContext({ weekStartsOn: "monday", setWeekStartsOn: () => {} });
+const useWeekStartsOn = () => React.useContext(WeekStartContext);
+// Given a JS Date.getDay() value (0=Sunday..6=Saturday), returns how many
+// slots that day sits after the configured first day of the week.
+const weekStartOffset = (jsDay, weekStartsOn) => (weekStartsOn === "monday" ? (jsDay + 6) % 7 : jsDay);
+
 const formatUsd = (n) => `$${(n || 0).toFixed(2)}`;
 const toLocalISODate = (d) => {
   const y = d.getFullYear();
@@ -3164,7 +3174,7 @@ function ProfilePage({ user, onLogout, onBack }) {
   const [nationality, setNationality] = useState("");
   const [timezone, setTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [email, setEmail] = useState(user.email);
-  const [weekStart, setWeekStart] = useState("monday"); // "monday" | "sunday"
+  const { weekStartsOn, setWeekStartsOn } = useWeekStartsOn();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
   const [editingField, setEditingField] = useState(null); // "name" | "nationality" | "timezone" | "email" | "password" | null
@@ -3276,8 +3286,8 @@ function ProfilePage({ user, onLogout, onBack }) {
             { key: "monday", label: t("profile.monday") },
             { key: "sunday", label: t("profile.sunday") },
           ]}
-          value={weekStart}
-          onChange={setWeekStart}
+          value={weekStartsOn}
+          onChange={setWeekStartsOn}
         />
         <ProfileToggleRow
           icon={<Bell size={16} color={C.mutedForeground} />}
@@ -3781,6 +3791,7 @@ function ResetCalendarModal({ onClose, onConfirm }) {
 
 function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
+  const { weekStartsOn } = useWeekStartsOn();
   const todayIso = todayStr();
   const startOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
   const [viewDate, setViewDate] = useState(startOfMonth(new Date(todayIso + "T00:00:00")));
@@ -3790,7 +3801,8 @@ function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCh
   const month = viewDate.getMonth();
   const firstDay = new Date(year, month, 1);
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const leadingBlanks = firstDay.getDay();
+  const leadingBlanks = weekStartOffset(firstDay.getDay(), weekStartsOn);
+  const orderedWeekdays = weekStartsOn === "monday" ? [...WEEKDAYS[lang].slice(1), WEEKDAYS[lang][0]] : WEEKDAYS[lang];
 
   const cells = [];
   for (let i = 0; i < leadingBlanks; i++) cells.push(null);
@@ -3822,7 +3834,7 @@ function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCh
         </button>
       </div>
       <div className="grid grid-cols-7 gap-1 mb-1">
-        {WEEKDAYS[lang].map((d, i) => (
+        {orderedWeekdays.map((d, i) => (
           <div key={i} className="text-center text-[10px] font-medium py-1" style={{ color: C.mutedForeground }}>
             {d}
           </div>
@@ -3881,9 +3893,17 @@ function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCh
 
 function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
   const { lang } = useLang();
+  const { weekStartsOn } = useWeekStartsOn();
   const todayIso = todayStr();
-  const [weekStart, setWeekStart] = useState(() => shiftDateStr(todayIso, -new Date(todayIso + "T00:00:00").getDay()));
+  const [weekStart, setWeekStart] = useState(() =>
+    shiftDateStr(todayIso, -weekStartOffset(new Date(todayIso + "T00:00:00").getDay(), weekStartsOn))
+  );
   const [selectedDay, setSelectedDay] = useState(null);
+
+  useEffect(() => {
+    setWeekStart(shiftDateStr(todayIso, -weekStartOffset(new Date(todayIso + "T00:00:00").getDay(), weekStartsOn)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekStartsOn]);
 
   const days = [];
   for (let i = 0; i < 7; i++) days.push(shiftDateStr(weekStart, i));
@@ -4600,12 +4620,14 @@ function App() {
     localStorage.setItem("hb-theme", theme);
   }, [theme]);
 
+  const [weekStartsOn, setWeekStartsOn] = useState(() => localStorage.getItem("hb-week-start") || "monday");
+  useEffect(() => {
+    localStorage.setItem("hb-week-start", weekStartsOn);
+  }, [weekStartsOn]);
+
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
-
-
-
 
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -4668,6 +4690,7 @@ function App() {
 
   return (
     <ThemeContext.Provider value={{ theme, setTheme }}>
+      <WeekStartContext.Provider value={{ weekStartsOn, setWeekStartsOn }}>
       <LangContext.Provider value={{ lang, setLang, t }}>
         <style>{FONT_IMPORT}</style>
         <AmbientBackground />
@@ -4692,6 +4715,7 @@ function App() {
           />
         )}
       </LangContext.Provider>
+      </WeekStartContext.Provider>
     </ThemeContext.Provider>
   );
 }
