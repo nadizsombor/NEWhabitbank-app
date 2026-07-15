@@ -14,12 +14,14 @@ const fromDbHabit = (h) => ({
 });
 
 export async function loadUserData(userId) {
-  const [{ data: profile }, { data: balanceRow }, { data: habitRows }, { data: checkinRows }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).single(),
-    supabase.from("balances").select("*").eq("user_id", userId).single(),
-    supabase.from("habits").select("*").eq("user_id", userId).order("created_at"),
-    supabase.from("checkins").select("*").eq("user_id", userId),
-  ]);
+  const [{ data: profile }, { data: balanceRow }, { data: habitRows }, { data: checkinRows }, { data: historyRows }] =
+    await Promise.all([
+      supabase.from("profiles").select("*").eq("id", userId).single(),
+      supabase.from("balances").select("*").eq("user_id", userId).single(),
+      supabase.from("habits").select("*").eq("user_id", userId).order("created_at"),
+      supabase.from("checkins").select("*").eq("user_id", userId),
+      supabase.from("habit_history_logs").select("*").eq("user_id", userId).order("created_at", { ascending: false }),
+    ]);
 
   return {
     profile,
@@ -35,7 +37,21 @@ export async function loadUserData(userId) {
       completed_date: c.completed_date,
       created_at: c.created_at,
     })),
+    historyLogs: historyRows || [],
   };
+}
+
+// Inserts a single row into habit_history_logs. `message` is the exact,
+// already-localized text to display in the Habit History feed - generated
+// once at the moment of the action, not re-derived later.
+export async function logHabitAction(userId, habitId, actionType, message) {
+  const { data, error } = await supabase
+    .from("habit_history_logs")
+    .insert({ user_id: userId, habit_id: habitId, action_type: actionType, message })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
 }
 
 export async function addDailyHabit(userId, name, value_usd, endDate = null) {

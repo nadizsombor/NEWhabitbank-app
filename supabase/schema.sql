@@ -70,10 +70,55 @@ create table if not exists public.checkins (
   unique (habit_id, completed_date)
 );
 
+-- Notification-style activity feed for the "Habit History" page. Each row is
+-- a single, already-completed user action (never a schedule projection) -
+-- one CREATED row per habit at creation time (not one per future/past
+-- occurrence of a recurring habit), one COMPLETED row per check-in, one
+-- UNCOMPLETED row per undone check-in, one DELETED row per (soft-)delete,
+-- one SKIPPED_SINGLE_DAY row when a single occurrence of a recurring habit
+-- is excluded (not the whole habit), and one CALENDAR_RESET row per "Reset
+-- calendar" action. message is the exact, pre-rendered text shown in the
+-- feed, in whichever language was active at the time.
+-- habit_id uses "on delete set null" (not cascade) so a log entry survives
+-- even if the referenced habit row is later hard-deleted; it is NULL for
+-- account-wide actions like CALENDAR_RESET that aren't tied to one habit.
+create table if not exists public.habit_history_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  habit_id uuid references public.habits(id) on delete set null,
+  action_type text not null check (
+    action_type in ('CREATED', 'COMPLETED', 'UNCOMPLETED', 'DELETED', 'SKIPPED_SINGLE_DAY', 'CALENDAR_RESET')
+  ),
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
+-- Widen the check constraint to also allow the newer action types on a
+-- database that already has this table from before they existed (no-op if
+-- the table was just created above with the constraint already included).
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'habit_history_logs' and column_name = 'action_type'
+  ) then
+    alter table public.habit_history_logs drop constraint if exists habit_history_logs_action_type_check;
+    alter table public.habit_history_logs
+      add constraint habit_history_logs_action_type_check
+      check (
+        action_type in ('CREATED', 'COMPLETED', 'UNCOMPLETED', 'DELETED', 'SKIPPED_SINGLE_DAY', 'CALENDAR_RESET')
+      );
+  end if;
+end $$;
+
+create index if not exists habit_history_logs_user_created_idx
+  on public.habit_history_logs (user_id, created_at desc);
+
 alter table public.profiles enable row level security;
 alter table public.balances enable row level security;
 alter table public.habits enable row level security;
 alter table public.checkins enable row level security;
+alter table public.habit_history_logs enable row level security;
 
 drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile" on public.profiles for select using (auth.uid() = id);
@@ -100,6 +145,11 @@ drop policy if exists "Users can insert own checkins" on public.checkins;
 create policy "Users can insert own checkins" on public.checkins for insert with check (auth.uid() = user_id);
 drop policy if exists "Users can delete own checkins" on public.checkins;
 create policy "Users can delete own checkins" on public.checkins for delete using (auth.uid() = user_id);
+
+drop policy if exists "Users can view own habit history logs" on public.habit_history_logs;
+create policy "Users can view own habit history logs" on public.habit_history_logs for select using (auth.uid() = user_id);
+drop policy if exists "Users can insert own habit history logs" on public.habit_history_logs;
+create policy "Users can insert own habit history logs" on public.habit_history_logs for insert with check (auth.uid() = user_id);
 
 -- Auto-create a profile + starting balance whenever someone signs up.
 create or replace function public.handle_new_user()

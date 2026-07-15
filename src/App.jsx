@@ -37,6 +37,7 @@ import {
   Pencil,
   Archive,
   ArchiveRestore,
+  RotateCcw,
 } from "lucide-react";
 
 import {
@@ -72,6 +73,7 @@ import {
   setHabitArchived,
   reassignCheckin,
   resetUserDataForDev,
+  logHabitAction,
 } from "./lib/api";
 
 const FONT_IMPORT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500&family=Playfair+Display:wght@400;500&display=swap');
@@ -166,6 +168,8 @@ const LIGHT_COLORS = {
   destructive: "#E03E3E",
   destructiveForeground: "#FFFFFF",
   destructiveMuted: "#FDECEC",
+  success: "#16A34A",
+  successMuted: "#DCFCE7",
   border: "#E9E9E7",
   slatePill: "transparent",
 };
@@ -184,6 +188,8 @@ const DARK_COLORS = {
   destructive: "#F87171",
   destructiveForeground: "#171717",
   destructiveMuted: "#3A2020",
+  success: "#4ADE80",
+  successMuted: "#1C3B2A",
   border: "#333333",
   slatePill: "transparent",
 };
@@ -383,6 +389,8 @@ const TRANSLATIONS = {
   "analytics.noCompletionsYet": { en: "No completions yet", hu: "Még nincs teljesítés" },
   "menu.myProfile": { en: "My Profile", hu: "Profilom" },
   "menu.transactionHistory": { en: "Habit History", hu: "Szokás előzmények" },
+  "history.title": { en: "Habit History", hu: "Szokás előzmények" },
+  "history.empty": { en: "No activity yet", hu: "Még nincs tevékenység" },
   "menu.howToUse": { en: "How To Use", hu: "Használati útmutató" },
   "menu.settings": { en: "Settings", hu: "Beállítások" },
   "menu.logout": { en: "Logout", hu: "Kijelentkezés" },
@@ -490,6 +498,72 @@ const MONTHS_FULL = {
 const formatMonthTitle = (year, month, lang) => {
   if (lang === "hu") return `${year}. ${MONTHS_FULL.hu[month]}`;
   return `${MONTHS_FULL.en[month]} ${year}`;
+};
+
+// Relative/absolute timestamp for the Habit History activity feed - e.g.
+// "5m ago" / "Yesterday at 15:30" / "Jul 3 at 09:00", based on age.
+const formatHistoryTimestamp = (isoTimestamp, lang) => {
+  const date = new Date(isoTimestamp);
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMin / 60);
+
+  if (diffMin < 1) return lang === "hu" ? "Most" : "Just now";
+  if (diffMin < 60) return lang === "hu" ? `${diffMin} perce` : `${diffMin}m ago`;
+  if (diffHr < 24) return lang === "hu" ? `${diffHr} órája` : `${diffHr}h ago`;
+
+  const timeStr = date.toLocaleTimeString(lang === "hu" ? "hu-HU" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dayDiff = Math.round((startOfDay(now) - startOfDay(date)) / 86400000);
+
+  if (dayDiff === 1) return lang === "hu" ? `Tegnap, ${timeStr}` : `Yesterday at ${timeStr}`;
+  const dateStr =
+    lang === "hu"
+      ? `${MONTHS.hu[date.getMonth()]} ${date.getDate()}.`
+      : `${MONTHS.en[date.getMonth()]} ${date.getDate()}`;
+  return `${dateStr}, ${timeStr}`;
+};
+
+const HABIT_TYPE_LABEL = {
+  daily: { en: "daily", hu: "napi" },
+  weekly: { en: "recurring", hu: "ismétlődő" },
+  custom: { en: "one-time", hu: "egyszeri" },
+};
+
+// Builds the display text stored directly in habit_history_logs.message -
+// generated once, in whatever language is active at the moment of the
+// action, and never re-translated afterwards (matches how a real
+// notification feed behaves).
+const buildHistoryMessage = (actionType, habitType, habitName, lang, dateIso) => {
+  if (actionType === "COMPLETED") {
+    return lang === "hu" ? `Teljesítetted a szokást: ${habitName}` : `You completed the habit: ${habitName}`;
+  }
+  if (actionType === "UNCOMPLETED") {
+    return lang === "hu"
+      ? `Visszavontad a teljesítést: ${habitName}`
+      : `You unmarked the habit: ${habitName}`;
+  }
+  if (actionType === "DELETED") {
+    return lang === "hu" ? `Töröltél egy szokást: ${habitName}` : `You deleted a habit: ${habitName}`;
+  }
+  if (actionType === "SKIPPED_SINGLE_DAY") {
+    const dateLabel = formatShortDate(dateIso, lang);
+    return lang === "hu"
+      ? `Kihagytad ezt a napot (${dateLabel}) - csak erre a napra: ${habitName}`
+      : `You skipped ${habitName} for ${dateLabel} only`;
+  }
+  if (actionType === "CALENDAR_RESET") {
+    return lang === "hu" ? "Visszaállítottad a szokásnaptárat" : "You reset the habit calendar";
+  }
+  const typeLabel = (HABIT_TYPE_LABEL[habitType] || HABIT_TYPE_LABEL.daily)[lang === "hu" ? "hu" : "en"];
+  return lang === "hu"
+    ? `Új ${typeLabel} szokást adtál hozzá: ${habitName}`
+    : `You added a new ${typeLabel} habit: ${habitName}`;
 };
 
 /* ---------------------------------- Toast --------------------------------- */
@@ -1072,6 +1146,72 @@ function ComingSoonPage({ onBack }) {
           {t("menu.comingSoon")}
         </span>
       </div>
+    </div>
+  );
+}
+
+/* ------------------------------- Habit History ------------------------------- */
+
+function HistoryLogRow({ log, lang }) {
+  const config =
+    log.action_type === "COMPLETED"
+      ? { Icon: CheckCircle2, bg: C.successMuted, color: C.success }
+      : log.action_type === "UNCOMPLETED"
+      ? { Icon: RotateCcw, bg: C.muted, color: C.mutedForeground }
+      : log.action_type === "SKIPPED_SINGLE_DAY"
+      ? { Icon: CalendarDays, bg: C.muted, color: C.mutedForeground }
+      : log.action_type === "CALENDAR_RESET"
+      ? { Icon: Repeat, bg: C.destructiveMuted, color: C.destructive }
+      : log.action_type === "DELETED"
+      ? { Icon: Trash2, bg: C.destructiveMuted, color: C.destructive }
+      : { Icon: Plus, bg: C.muted, color: C.foreground };
+
+  return (
+    <div className="flex items-center gap-3 rounded-2xl px-3.5 py-3 hb-glass">
+      <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: config.bg }}>
+        <config.Icon size={15} color={config.color} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm leading-snug" style={{ color: C.foreground, ...body }}>
+          {log.message}
+        </p>
+        <p className="text-[11px] mt-0.5" style={{ color: C.mutedForeground, ...mono }}>
+          {formatHistoryTimestamp(log.created_at, lang)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function HabitHistoryPage({ historyLogs, onBack }) {
+  const { t, lang } = useLang();
+  return (
+    <div className="max-w-lg mx-auto px-4 pb-20">
+      <div className="flex items-center gap-3 py-4">
+        <button
+          onClick={onBack}
+          className="w-9 h-9 rounded-lg flex items-center justify-center hb-glass active:opacity-70 shrink-0"
+        >
+          <ArrowLeft size={17} color={C.foreground} />
+        </button>
+        <span className="text-xl tracking-wide" style={heading}>
+          {t("history.title")}
+        </span>
+      </div>
+
+      {historyLogs.length === 0 ? (
+        <div className="flex items-center justify-center" style={{ minHeight: "55vh" }}>
+          <span className="text-sm" style={{ color: C.mutedForeground, ...body }}>
+            {t("history.empty")}
+          </span>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {historyLogs.map((log) => (
+            <HistoryLogRow key={log.id} log={log} lang={lang} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1980,8 +2120,8 @@ function ConfirmPastCheckinModal({ habit, onClose, onConfirm }) {
 
 /* ------------------------------ Add-habit flow (shared) ------------------------- */
 
-function useAddHabitFlow(user, setHabits, showToast) {
-  const { t } = useLang();
+function useAddHabitFlow(user, setHabits, showToast, setHistoryLogs) {
+  const { t, lang } = useLang();
   const [showForm, setShowForm] = useState(false);
 
   const handleCreateHabit = async ({ type, name, value_usd, scheduledDates, weekdays, endDate }) => {
@@ -1997,6 +2137,12 @@ function useAddHabitFlow(user, setHabits, showToast) {
       }
       setHabits((prev) => [...prev, habit]);
       showToast(t("toast.habitCreated"));
+      if (setHistoryLogs) {
+        const message = buildHistoryMessage("CREATED", type, name, lang);
+        logHabitAction(user.id, habit.id, "CREATED", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -2007,12 +2153,24 @@ function useAddHabitFlow(user, setHabits, showToast) {
 
 /* ---------------------------------- Home page --------------------------------- */
 
-function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast, onLogout }) {
+function HomePage({
+  user,
+  setTab,
+  habits,
+  setHabits,
+  checkins,
+  setCheckins,
+  balance,
+  setBalance,
+  setHistoryLogs,
+  showToast,
+  onLogout,
+}) {
   const { t, lang } = useLang();
   const [showTopUp, setShowTopUp] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [showUnlock, setShowUnlock] = useState(false);
-  const addFlow = useAddHabitFlow(user, setHabits, showToast);
+  const addFlow = useAddHabitFlow(user, setHabits, showToast, setHistoryLogs);
   const [showManage, setShowManage] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [pendingUncheck, setPendingUncheck] = useState(null);
@@ -2097,6 +2255,13 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
     try {
       const deletedAt = await softDeleteHabit(id);
       setHabits((prev) => prev.map((h) => (h.id === id ? { ...h, deletedAt } : h)));
+      const deletedHabit = habits.find((h) => h.id === id);
+      if (setHistoryLogs && deletedHabit) {
+        const message = buildHistoryMessage("DELETED", deletedHabit.type, deletedHabit.name, lang);
+        logHabitAction(user.id, id, "DELETED", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -2114,6 +2279,12 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
       setBalance((prev) => ({ ...prev, ...next }));
       setCheckins((prev) => prev.filter((c) => !(c.habit_id === habit.id && c.completed_date === selectedDate)));
       showToast(`${formatUsd(habit.value_usd)} ${t("toast.movedBackSuffix")}`);
+      if (setHistoryLogs) {
+        const message = buildHistoryMessage("UNCOMPLETED", habit.type, habit.name, lang);
+        logHabitAction(user.id, habit.id, "UNCOMPLETED", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -2135,6 +2306,12 @@ function HomePage({ user, setTab, habits, setHabits, checkins, setCheckins, bala
         { id: checkin.id, habit_id: habit.id, completed_date: selectedDate, created_at: checkin.created_at },
       ]);
       showToast(`+${formatUsd(habit.value_usd)} ${t("toast.earnedSuffix")}`);
+      if (setHistoryLogs) {
+        const message = buildHistoryMessage("COMPLETED", habit.type, habit.name, lang);
+        logHabitAction(user.id, habit.id, "COMPLETED", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -3546,7 +3723,18 @@ function AddHabitForDayForm({ dateLabel, onClose, onConfirm }) {
   );
 }
 
-function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, setCheckins, showToast, onClose }) {
+function DayEditorModal({
+  dateIso,
+  habits,
+  checkins,
+  balance,
+  user,
+  setHabits,
+  setCheckins,
+  setHistoryLogs,
+  showToast,
+  onClose,
+}) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const title = dateIso === todayIso ? t("calendar.today") : formatShortDate(dateIso, lang);
@@ -3609,6 +3797,12 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
       setHabits((prev) => [...prev, habit]);
       if (mode === "edit") setDraftHabits((prev) => [...prev, habit]);
       showToast(t("toast.habitCreated"));
+      if (setHistoryLogs) {
+        const message = buildHistoryMessage("CREATED", "custom", name, lang);
+        logHabitAction(user.id, habit.id, "CREATED", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -3621,10 +3815,22 @@ function DayEditorModal({ dateIso, habits, checkins, balance, user, setHabits, s
         if (scope === "entire") {
           const deletedAt = await softDeleteHabit(habit.id);
           setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, deletedAt } : h)));
+          if (setHistoryLogs) {
+            const message = buildHistoryMessage("DELETED", habit.type, habit.name, lang);
+            logHabitAction(user.id, habit.id, "DELETED", message)
+              .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+              .catch(() => {});
+          }
         } else {
           const nextExcluded = [...(habit.excludedDates || []), dateIso];
           await setHabitExcludedDates(habit.id, nextExcluded);
           setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, excludedDates: nextExcluded } : h)));
+          if (setHistoryLogs) {
+            const message = buildHistoryMessage("SKIPPED_SINGLE_DAY", habit.type, habit.name, lang, dateIso);
+            logHabitAction(user.id, habit.id, "SKIPPED_SINGLE_DAY", message)
+              .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+              .catch(() => {});
+          }
         }
       }
 
@@ -3789,7 +3995,7 @@ function ResetCalendarModal({ onClose, onConfirm }) {
   );
 }
 
-function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
+function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, setHistoryLogs, showToast }) {
   const { lang } = useLang();
   const { weekStartsOn } = useWeekStartsOn();
   const todayIso = todayStr();
@@ -3883,6 +4089,7 @@ function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCh
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
+          setHistoryLogs={setHistoryLogs}
           showToast={showToast}
           onClose={() => setSelectedDay(null)}
         />
@@ -3891,7 +4098,7 @@ function MonthlyCalendarView({ habits, checkins, balance, user, setHabits, setCh
   );
 }
 
-function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
+function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, setHistoryLogs, showToast }) {
   const { lang } = useLang();
   const { weekStartsOn } = useWeekStartsOn();
   const todayIso = todayStr();
@@ -3965,6 +4172,7 @@ function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setChe
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
+          setHistoryLogs={setHistoryLogs}
           showToast={showToast}
           onClose={() => setSelectedDay(null)}
         />
@@ -3973,7 +4181,7 @@ function WeeklyCalendarView({ habits, checkins, balance, user, setHabits, setChe
   );
 }
 
-function DailyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, showToast }) {
+function DailyCalendarView({ habits, checkins, balance, user, setHabits, setCheckins, setHistoryLogs, showToast }) {
   const { t, lang } = useLang();
   const todayIso = todayStr();
   const [selectedDate, setSelectedDate] = useState(todayIso);
@@ -4017,6 +4225,7 @@ function DailyCalendarView({ habits, checkins, balance, user, setHabits, setChec
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
+          setHistoryLogs={setHistoryLogs}
           showToast={showToast}
           onClose={() => setEditing(false)}
         />
@@ -4031,7 +4240,7 @@ function DailyCalendarView({ habits, checkins, balance, user, setHabits, setChec
 // check-in along with it if one exists) vs. editing the recurring definition
 // itself. "custom" habits skip the scope choice entirely - editing their
 // scheduled_dates is already day-level granular.
-function EditSingleHabitModal({ habit, checkins, user, onClose, onSaved, showToast }) {
+function EditSingleHabitModal({ habit, checkins, user, setHistoryLogs, onClose, onSaved, showToast }) {
   const { t, lang } = useLang();
   const { theme } = useTheme();
   const canChooseScope = habit.type === "daily" || habit.type === "weekly";
@@ -4086,6 +4295,16 @@ function EditSingleHabitModal({ habit, checkins, user, onClose, onSaved, showToa
           newHabit,
           movedCheckinId: movedCheckin?.id,
         });
+        if (setHistoryLogs) {
+          const skipMessage = buildHistoryMessage("SKIPPED_SINGLE_DAY", habit.type, habit.name, lang, scopeDate);
+          const createMessage = buildHistoryMessage("CREATED", "custom", name.trim(), lang);
+          Promise.all([
+            logHabitAction(user.id, habit.id, "SKIPPED_SINGLE_DAY", skipMessage),
+            logHabitAction(user.id, newHabit.id, "CREATED", createMessage),
+          ])
+            .then((logs) => setHistoryLogs((prev) => [...logs, ...prev]))
+            .catch(() => {});
+        }
       } else {
         const fields = { name: name.trim(), value_usd: Number(value), type };
         if (type === "weekly") {
@@ -4331,8 +4550,18 @@ function EditHabitsRow({ habit, onEdit, onToggleArchive, onRequestDelete }) {
   );
 }
 
-function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showToast, onClose, onResetCalendar }) {
-  const { t } = useLang();
+function EditHabitsModal({
+  habits,
+  checkins,
+  user,
+  setHabits,
+  setCheckins,
+  setHistoryLogs,
+  showToast,
+  onClose,
+  onResetCalendar,
+}) {
+  const { t, lang } = useLang();
   const [editingHabit, setEditingHabit] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -4356,6 +4585,12 @@ function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showT
     try {
       const deletedAt = await softDeleteHabit(habit.id);
       setHabits((prev) => prev.map((h) => (h.id === habit.id ? { ...h, deletedAt } : h)));
+      if (setHistoryLogs) {
+        const message = buildHistoryMessage("DELETED", habit.type, habit.name, lang);
+        logHabitAction(user.id, habit.id, "DELETED", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
@@ -4440,6 +4675,7 @@ function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showT
           habit={editingHabit}
           checkins={checkins}
           user={user}
+          setHistoryLogs={setHistoryLogs}
           onClose={() => setEditingHabit(null)}
           onSaved={handleSaved}
           showToast={showToast}
@@ -4465,11 +4701,11 @@ function EditHabitsModal({ habits, checkins, user, setHabits, setCheckins, showT
   );
 }
 
-function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, balance, showToast }) {
-  const { t } = useLang();
+function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, balance, setHistoryLogs, showToast }) {
+  const { t, lang } = useLang();
   const [view, setView] = useState("monthly");
   const [showEditHabits, setShowEditHabits] = useState(false);
-  const addFlow = useAddHabitFlow(user, setHabits, showToast);
+  const addFlow = useAddHabitFlow(user, setHabits, showToast, setHistoryLogs);
 
   const handleResetCalendar = async () => {
     try {
@@ -4494,12 +4730,18 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, bal
           .map((h) => ({ ...h, archived: true }))
       );
       showToast(t("toast.calendarReset"));
+      if (setHistoryLogs) {
+        const message = buildHistoryMessage("CALENDAR_RESET", null, null, lang);
+        logHabitAction(user.id, null, "CALENDAR_RESET", message)
+          .then((log) => setHistoryLogs((prev) => [log, ...prev]))
+          .catch(() => {});
+      }
     } catch (e) {
       showToast(e.message, "error");
     }
   };
 
-  const viewProps = { habits, checkins, balance, user, setHabits, setCheckins, showToast };
+  const viewProps = { habits, checkins, balance, user, setHabits, setCheckins, setHistoryLogs, showToast };
 
   return (
     <div className="max-w-lg mx-auto px-4 pb-20">
@@ -4542,6 +4784,7 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, bal
           user={user}
           setHabits={setHabits}
           setCheckins={setCheckins}
+          setHistoryLogs={setHistoryLogs}
           showToast={showToast}
           onClose={() => setShowEditHabits(false)}
           onResetCalendar={handleResetCalendar}
@@ -4553,7 +4796,21 @@ function HabitCalendarPage({ user, habits, setHabits, checkins, setCheckins, bal
 
 /* ---------------------------------- App layout --------------------------------- */
 
-function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, setCheckins, balance, setBalance, showToast }) {
+function AppLayout({
+  user,
+  tab,
+  setTab,
+  onLogout,
+  habits,
+  setHabits,
+  checkins,
+  setCheckins,
+  balance,
+  setBalance,
+  historyLogs,
+  setHistoryLogs,
+  showToast,
+}) {
   return (
     <div className="min-h-screen w-full" style={{ color: C.foreground, ...body }}>
       <style>{FONT_IMPORT}</style>
@@ -4567,6 +4824,7 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           setCheckins={setCheckins}
           balance={balance}
           setBalance={setBalance}
+          setHistoryLogs={setHistoryLogs}
           showToast={showToast}
           onLogout={onLogout}
         />
@@ -4590,11 +4848,12 @@ function AppLayout({ user, tab, setTab, onLogout, habits, setHabits, checkins, s
           checkins={checkins}
           setCheckins={setCheckins}
           balance={balance}
+          setHistoryLogs={setHistoryLogs}
           showToast={showToast}
         />
       )}
       {tab === "profile" && <ProfilePage user={user} onLogout={onLogout} onBack={() => setTab("home")} />}
-      {tab === "transactions" && <ComingSoonPage onBack={() => setTab("home")} />}
+      {tab === "transactions" && <HabitHistoryPage historyLogs={historyLogs} onBack={() => setTab("home")} />}
       {tab === "howto" && <ComingSoonPage onBack={() => setTab("home")} />}
       {tab === "settings" && <ComingSoonPage onBack={() => setTab("home")} />}
       <BottomNav tab={tab} setTab={setTab} />
@@ -4628,6 +4887,8 @@ function App() {
   const [habits, setHabits] = useState([]);
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
+  const [historyLogs, setHistoryLogs] = useState([]);
+
 
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -4641,6 +4902,7 @@ function App() {
         setHabits([]);
         setCheckins([]);
         setBalance({ locked_amount: 0, withdrawable_amount: 0 });
+        setHistoryLogs([]);
         setRoute("login");
         setLoading(false);
         return;
@@ -4649,9 +4911,13 @@ function App() {
 
       if (session?.user) {
         try {
-          const { profile, balance: balanceData, habits: habitsData, checkins: checkinsData } = await loadUserData(
-            session.user.id
-          );
+          const {
+            profile,
+            balance: balanceData,
+            habits: habitsData,
+            checkins: checkinsData,
+            historyLogs: historyLogsData,
+          } = await loadUserData(session.user.id);
           setUser({
             id: session.user.id,
             email: session.user.email,
@@ -4661,6 +4927,7 @@ function App() {
           setBalance(balanceData);
           setHabits(habitsData);
           setCheckins(checkinsData);
+          setHistoryLogs(historyLogsData);
           setTab("home");
           setRoute("app");
           if (event === "SIGNED_IN") showToast(t("toast.welcomeBack"));
@@ -4711,6 +4978,8 @@ function App() {
             setCheckins={setCheckins}
             balance={balance}
             setBalance={setBalance}
+            historyLogs={historyLogs}
+            setHistoryLogs={setHistoryLogs}
             showToast={showToast}
           />
         )}
