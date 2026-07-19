@@ -393,6 +393,7 @@ const TRANSLATIONS = {
   "history.empty": { en: "No activity yet", hu: "Még nincs tevékenység" },
   "menu.howToUse": { en: "How To Use", hu: "Használati útmutató" },
   "menu.settings": { en: "Settings", hu: "Beállítások" },
+  "menu.switchToAdvanced": { en: "Manage Plans", hu: "Csomagok kezelése" },
   "menu.logout": { en: "Logout", hu: "Kijelentkezés" },
   "menu.comingSoon": { en: "Coming soon", hu: "Hamarosan" },
   "profile.email": { en: "Email", hu: "E-mail" },
@@ -1092,6 +1093,7 @@ function HamburgerMenu({ onClose, onNavigate, onLogout }) {
     { key: "transactions", label: t("menu.transactionHistory"), icon: ListChecks },
     { key: "howto", label: t("menu.howToUse"), icon: HelpCircle },
     { key: "settings", label: t("menu.settings"), icon: Settings },
+    { key: "advanced", label: t("menu.switchToAdvanced"), icon: SlidersHorizontal },
   ];
 
   return (
@@ -1123,6 +1125,118 @@ function HamburgerMenu({ onClose, onNavigate, onLogout }) {
               {t("menu.logout")}
             </span>
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Static, pixel-matched paywall/pricing UI for "Manage Plans". No
+// interactive logic yet (no Stripe, no real plan switching) - the CTA
+// buttons are inert by design until that's wired up in a later task.
+// Intentionally fixed light colors (not the C.xxx theme palette) - a
+// pricing/paywall screen like this is meant to look identical regardless
+// of the app's dark/light mode setting.
+function PricingFeatureItem({ text }) {
+  return (
+    <li className="flex items-center gap-3">
+      <Check size={16} strokeWidth={3} className="shrink-0" style={{ color: "#D4D4D4" }} />
+      <span className="text-[15px] font-semibold" style={{ color: "#000000" }}>
+        {text}
+      </span>
+    </li>
+  );
+}
+
+function PricingCard({ badge, price, topStyle, description, ctaLabel, ctaClassName, ctaStyle, features }) {
+  return (
+    <div className="rounded-[32px] p-3 shadow-xl" style={{ background: "#FFFFFF" }}>
+      <div className="rounded-2xl p-6 flex flex-col justify-between min-h-[180px]" style={topStyle}>
+        <span
+          className="inline-block w-fit rounded-full px-4 py-1.5 text-sm font-semibold"
+          style={{ background: "#FFFFFF", color: "#000000" }}
+        >
+          {badge}
+        </span>
+        <div>
+          <span className="text-4xl font-bold" style={{ color: "#000000" }}>
+            {price}
+          </span>
+          <span className="text-base font-medium" style={{ color: "#000000" }}>
+            /month
+          </span>
+        </div>
+      </div>
+
+      <div className="px-3 pt-5 pb-4">
+        <p className="text-sm mb-5" style={{ color: "#3F3F3F" }}>
+          {description}
+        </p>
+        <button
+          className={`w-full rounded-full py-3.5 text-[15px] font-semibold mb-7 ${ctaClassName}`}
+          style={ctaStyle}
+        >
+          {ctaLabel}
+        </button>
+        <ul className="space-y-4">
+          {features.map((f) => (
+            <PricingFeatureItem key={f} text={f} />
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function AdvancedPage({ onBack }) {
+  return (
+    <div className="min-h-screen w-full" style={{ background: "#F5F5F5" }}>
+      <div className="max-w-md mx-auto px-5 pb-28">
+        <div className="flex items-center py-4">
+          <button
+            onClick={onBack}
+            className="w-9 h-9 rounded-lg flex items-center justify-center active:opacity-70"
+            style={{ background: "#FFFFFF", border: "1px solid #E9E9E7" }}
+          >
+            <ArrowLeft size={17} color="#191919" />
+          </button>
+        </div>
+
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold mb-2" style={{ color: "#000000" }}>
+            Pricing plans
+          </h1>
+          <p className="text-base" style={{ color: "#3F3F3F" }}>
+            Choose the right plan for your needs
+          </p>
+        </div>
+
+        <div className="space-y-8">
+          <PricingCard
+            badge="Starter"
+            price="$0"
+            topStyle={{ background: "#F0F0F0" }}
+            description="For mastering your daily essentials."
+            ctaLabel="Current Plan"
+            ctaClassName="border-2"
+            ctaStyle={{ background: "#FFFFFF", borderColor: "#000000", color: "#000000" }}
+            features={["Max 500$ money deposit", "Track Up To 3 Habits", "Simple Insights", "Single Pocket"]}
+          />
+          <PricingCard
+            badge="Advanced"
+            price="$4"
+            topStyle={{ background: "#F0F0F0" }}
+            description="For those who want zero limits on their growth."
+            ctaLabel="Select Plan"
+            ctaClassName=""
+            ctaStyle={{ background: "#000000", color: "#FFFFFF" }}
+            features={[
+              "Unlimited money deposit",
+              "Unlimited habit tracking",
+              "Deep-Dive Analytics",
+              "Custom Goal Pockets",
+            ]}
+          />
         </div>
       </div>
     </div>
@@ -4856,6 +4970,7 @@ function AppLayout({
       {tab === "transactions" && <HabitHistoryPage historyLogs={historyLogs} onBack={() => setTab("home")} />}
       {tab === "howto" && <ComingSoonPage onBack={() => setTab("home")} />}
       {tab === "settings" && <ComingSoonPage onBack={() => setTab("home")} />}
+      {tab === "advanced" && <AdvancedPage onBack={() => setTab("home")} />}
       <BottomNav tab={tab} setTab={setTab} />
     </div>
   );
@@ -4888,7 +5003,6 @@ function App() {
   const [checkins, setCheckins] = useState([]);
   const [balance, setBalance] = useState({ locked_amount: 0, withdrawable_amount: 0, withdrawn_at: null });
   const [historyLogs, setHistoryLogs] = useState([]);
-
 
   useEffect(() => {
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, session) => {
