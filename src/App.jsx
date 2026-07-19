@@ -1134,48 +1134,35 @@ function HamburgerMenu({ onClose, onNavigate, onLogout }) {
 // Static, pixel-matched paywall/pricing UI for "Manage Plans". No
 // interactive logic yet (no Stripe, no real plan switching) - the CTA
 // buttons are inert by design until that's wired up in a later task.
-// Intentionally fixed light colors (not the C.xxx theme palette) - a
-// pricing/paywall screen like this is meant to look identical regardless
-// of the app's dark/light mode setting.
+// Uses real Tailwind classes (incl. dark:) rather than the C.xxx theme
+// palette, so it tracks the app's light/dark toggle (the `dark` class on
+// <html>, per tailwind.config's darkMode: "class") while keeping its own
+// deliberately bank-app-elegant look in each mode.
 function PricingFeatureItem({ text }) {
   return (
     <li className="flex items-center gap-3">
-      <Check size={16} strokeWidth={3} className="shrink-0" style={{ color: "#D4D4D4" }} />
-      <span className="text-[15px] font-semibold" style={{ color: "#000000" }}>
-        {text}
-      </span>
+      <Check size={16} strokeWidth={3} className="shrink-0 text-gray-300 dark:text-gray-500" />
+      <span className="text-[15px] font-semibold text-black dark:text-gray-200">{text}</span>
     </li>
   );
 }
 
-function PricingCard({ badge, price, topStyle, description, ctaLabel, ctaClassName, ctaStyle, features }) {
+function PricingCard({ badge, price, description, ctaLabel, ctaClassName, features }) {
   return (
-    <div className="rounded-[32px] p-3 shadow-xl" style={{ background: "#FFFFFF" }}>
-      <div className="rounded-2xl p-6 flex flex-col justify-between min-h-[180px]" style={topStyle}>
-        <span
-          className="inline-block w-fit rounded-full px-4 py-1.5 text-sm font-semibold"
-          style={{ background: "#FFFFFF", color: "#000000" }}
-        >
+    <div className="rounded-[32px] p-3 bg-white shadow-xl dark:bg-gray-800 dark:border dark:border-gray-700 dark:shadow-none">
+      <div className="rounded-2xl p-6 flex flex-col justify-between min-h-[180px] bg-gray-100 dark:bg-gray-700">
+        <span className="inline-block w-fit rounded-full px-4 py-1.5 text-sm font-semibold bg-white text-black dark:bg-gray-600 dark:text-white">
           {badge}
         </span>
         <div>
-          <span className="text-4xl font-bold" style={{ color: "#000000" }}>
-            {price}
-          </span>
-          <span className="text-base font-medium" style={{ color: "#000000" }}>
-            /month
-          </span>
+          <span className="text-4xl font-bold text-black dark:text-white">{price}</span>
+          <span className="text-base font-medium text-black dark:text-white">/month</span>
         </div>
       </div>
 
       <div className="px-3 pt-5 pb-4">
-        <p className="text-sm mb-5" style={{ color: "#3F3F3F" }}>
-          {description}
-        </p>
-        <button
-          className={`w-full rounded-full py-3.5 text-[15px] font-semibold mb-7 ${ctaClassName}`}
-          style={ctaStyle}
-        >
+        <p className="text-sm mb-5 text-gray-600 dark:text-gray-400">{description}</p>
+        <button className={`w-full rounded-full py-3.5 text-[15px] font-semibold mb-7 transition-colors ${ctaClassName}`}>
           {ctaLabel}
         </button>
         <ul className="space-y-4">
@@ -1190,46 +1177,37 @@ function PricingCard({ badge, price, topStyle, description, ctaLabel, ctaClassNa
 
 function AdvancedPage({ onBack }) {
   return (
-    <div className="min-h-screen w-full" style={{ background: "#F5F5F5" }}>
+    <div className="min-h-screen w-full bg-[#F5F5F5] dark:bg-[#121212]">
       <div className="max-w-md mx-auto px-5 pb-28">
         <div className="flex items-center py-4">
           <button
             onClick={onBack}
-            className="w-9 h-9 rounded-lg flex items-center justify-center active:opacity-70"
-            style={{ background: "#FFFFFF", border: "1px solid #E9E9E7" }}
+            className="w-9 h-9 rounded-lg flex items-center justify-center active:opacity-70 bg-white border border-[#E9E9E7] dark:bg-gray-800 dark:border-gray-700"
           >
-            <ArrowLeft size={17} color="#191919" />
+            <ArrowLeft size={17} className="text-[#191919] dark:text-gray-200" />
           </button>
         </div>
 
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold mb-2" style={{ color: "#000000" }}>
-            Pricing plans
-          </h1>
-          <p className="text-base" style={{ color: "#3F3F3F" }}>
-            Choose the right plan for your needs
-          </p>
+          <h1 className="text-4xl font-bold mb-2 text-black dark:text-white">Pricing plans</h1>
+          <p className="text-base text-gray-600 dark:text-gray-400">Choose the right plan for your needs</p>
         </div>
 
         <div className="space-y-8">
           <PricingCard
             badge="Starter"
             price="$0"
-            topStyle={{ background: "#F0F0F0" }}
             description="For mastering your daily essentials."
             ctaLabel="Current Plan"
-            ctaClassName="border-2"
-            ctaStyle={{ background: "#FFFFFF", borderColor: "#000000", color: "#000000" }}
+            ctaClassName="bg-white border-2 border-black text-black dark:bg-transparent dark:border-gray-300 dark:text-gray-200 dark:hover:bg-gray-700"
             features={["Max 500$ money deposit", "Track Up To 3 Habits", "Simple Insights", "Single Pocket"]}
           />
           <PricingCard
             badge="Advanced"
             price="$4"
-            topStyle={{ background: "#F0F0F0" }}
             description="For those who want zero limits on their growth."
             ctaLabel="Select Plan"
-            ctaClassName=""
-            ctaStyle={{ background: "#000000", color: "#FFFFFF" }}
+            ctaClassName="bg-black text-white dark:bg-white dark:text-black dark:hover:bg-gray-200"
             features={[
               "Unlimited money deposit",
               "Unlimited habit tracking",
